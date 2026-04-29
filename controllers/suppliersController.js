@@ -127,6 +127,94 @@ export const addSupplier = (req, res) => {
     });
   };
 
+// =========================
+//    UPDATE SUPPLIER
+// =========================
+export const updateSupplier = (req, res) => {
+  const { id } = req.params;
+  const { name, phone, city } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: "Name required" });
+  }
+
+  const sql = `
+    UPDATE suppliers
+    SET name = ?, phone = ?, city = ?
+    WHERE id = ?
+  `;
+
+  db.query(sql, [name, phone, city, id], (err) => {
+    if (err) {
+      console.error("UPDATE SUPPLIER ERROR:", err);
+      return res.status(500).json({ error: "Failed to update supplier" });
+    }
+
+    res.json({ message: "Supplier updated" });
+  });
+};
+
+// =========================
+//    DELETE SUPPLIER (WITH VALIDATION)
+// =========================
+export const deleteSupplier = (req, res) => {
+  const { id } = req.params;
+
+  const checkSql = `
+    SELECT 
+      (SELECT COUNT(*) FROM purchases WHERE supplier_id = ?) AS purchasesCount,
+      (SELECT COUNT(*) FROM supplier_payments WHERE supplier_id = ?) AS paymentsCount
+  `;
+
+  db.query(checkSql, [id, id], (err, result) => {
+    if (err) {
+      console.error("CHECK DELETE ERROR:", err);
+      return res.status(500).json({ error: "Failed to validate supplier" });
+    }
+
+    const { purchasesCount, paymentsCount } = result[0];
+
+    if (purchasesCount > 0 || paymentsCount > 0) {
+      return res.status(400).json({
+        error: "Cannot delete supplier with transactions or payments",
+      });
+    }
+
+    const deleteSql = `DELETE FROM suppliers WHERE id = ?`;
+
+    db.query(deleteSql, [id], (err2) => {
+      if (err2) {
+        console.error("DELETE SUPPLIER ERROR:", err2);
+        return res.status(500).json({ error: "Failed to delete supplier" });
+      }
+
+      res.json({ message: "Supplier deleted" });
+    });
+  });
+};
+
+// =========================
+//    TOGGLE SUPPLIER STATUS
+// =========================
+export const toggleSupplierStatus = (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    UPDATE suppliers
+    SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END
+    WHERE id = ?
+  `;
+
+  db.query(sql, [id], (err) => {
+    if (err) {
+      console.error("TOGGLE STATUS ERROR:", err);
+      return res.status(500).json({ error: "Failed to update status" });
+    }
+
+    res.json({ message: "Status updated" });
+  });
+};
+
 // 📊 GLOBAL SUPPLIERS STATS FOR DASHBOARD
 export const getSuppliersStats = (req, res) => {
   const totalsSql = `
@@ -260,54 +348,72 @@ export const exportSuppliers = (req, res) => {
  //ledger
 
  export const getSupplierLedger = (req, res) => {
-    const { id } = req.params;
-  
-    const supplierSql = `
-      SELECT id, name, phone, city
-      FROM suppliers
-      WHERE id = ?
-    `;
-  
-    const ledgerSql = `
-      SELECT * FROM (
-        -- GROUPED PURCHASE INVOICES (DAILY)
-        SELECT 
-          'purchase' AS type,
-          CONCAT('INV-', DATE(MIN(p.created_at))) AS reference_id,
-          MIN(p.created_at) AS created_at,
-          SUM(p.quantity * p.purchase_price) AS amount
-        FROM purchases p
-        WHERE p.supplier_id = ?
-        GROUP BY DATE(p.created_at)
+  const { id } = req.params;
+  const { limit = 20, offset = 0 } = req.query;
 
-        UNION ALL
+  const supplierSql = `
+    SELECT id, name, phone, city
+    FROM suppliers
+    WHERE id = ?
+  `;
 
-        -- PAYMENTS
-        SELECT 
-          'payment' AS type,
-          CONCAT('PAY-', sp.id) AS reference_id,
-          sp.created_at,
-          sp.amount
-        FROM supplier_payments sp
-        WHERE sp.supplier_id = ?
-      ) t
-      ORDER BY t.created_at ASC
-    `;
-  
-    db.query(supplierSql, [id], (err, supplierResult) => {
-      if (err) {
-        console.error("SUPPLIER FETCH ERROR:", err);
-        return res.status(500).json({ error: "Failed to fetch supplier" });
+  const ledgerSql = `
+    SELECT * FROM (
+      -- GROUPED PURCHASE INVOICES (DAILY)
+      SELECT 
+        'purchase' AS type,
+        CONCAT('INV-', DATE(MIN(p.created_at))) AS reference_id,
+        MIN(p.created_at) AS created_at,
+        SUM(p.quantity * p.purchase_price) AS amount
+      FROM purchases p
+      WHERE p.supplier_id = ?
+      GROUP BY DATE(p.created_at)
+
+      UNION ALL
+
+      -- PAYMENTS
+      SELECT 
+        'payment' AS type,
+        CONCAT('PAY-', sp.id) AS reference_id,
+        sp.created_at,
+        sp.amount
+      FROM supplier_payments sp
+      WHERE sp.supplier_id = ?
+    ) t
+    ORDER BY t.created_at ASC
+    LIMIT ? OFFSET ?
+  `;
+
+  const countSql = `
+    SELECT COUNT(*) AS total FROM (
+      SELECT DATE(created_at) FROM purchases WHERE supplier_id = ? GROUP BY DATE(created_at)
+      UNION ALL
+      SELECT id FROM supplier_payments WHERE supplier_id = ?
+    ) t
+  `;
+
+  db.query(supplierSql, [id], (err, supplierResult) => {
+    if (err) {
+      console.error("SUPPLIER FETCH ERROR:", err);
+      return res.status(500).json({ error: "Failed to fetch supplier" });
+    }
+
+    const supplier = supplierResult[0];
+
+    db.query(countSql, [id, id], (countErr, countResult) => {
+      if (countErr) {
+        console.error("COUNT LEDGER ERROR:", countErr);
+        return res.status(500).json({ error: "Failed to count ledger" });
       }
-  
-      const supplier = supplierResult[0];
-  
-      db.query(ledgerSql, [id, id], (err2, result) => {
+
+      const total = countResult[0]?.total || 0;
+
+      db.query(ledgerSql, [id, id, Number(limit), Number(offset)], (err2, result) => {
         if (err2) {
           console.error("LEDGER ERROR:", err2);
           return res.status(500).json({ error: "Failed to fetch ledger" });
         }
-  
+
         let balance = 0;
 
         const ledger = result.map((row) => {
@@ -323,26 +429,15 @@ export const exportSuppliers = (req, res) => {
           };
         });
 
-        // 🔥 Fetch detailed purchase items grouped by date
-        const itemsSql = `
-          SELECT 
-            DATE(p.created_at) as invoice_date,
-            p.book_id,
-            p.quantity,
-            p.purchase_price
-          FROM purchases p
-          WHERE p.supplier_id = ?
-        `;
-
-        // attach items later (optional enhancement)
-
         res.json({
           supplier,
           ledger,
+          total,
         });
       });
     });
-  };
+  });
+};
 // 📄 GET SUPPLIER INVOICE DETAILS (books for a specific date)
 export const getSupplierInvoiceDetails = (req, res) => {
     const { id, date } = req.params;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
 import { useNavigate } from "react-router-dom";
 import SuppliersHeader from "../components/SuppliersHeader";
 import SuppliersStats from "../components/SuppliersStats";
@@ -13,6 +14,7 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
     amount: "",
     note: "",
   });
+  const [search, setSearch] = useState("");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -31,6 +33,13 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
 
         <form onSubmit={handleSubmit} className="space-y-3">
 
+          <input
+            placeholder="Search supplier..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full border px-3 py-2 rounded-lg"
+          />
+
           <select
             name="supplier_id"
             value={form.supplier_id}
@@ -38,8 +47,10 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
             className="w-full border px-3 py-2 rounded-lg"
           >
             <option value="">Select Supplier</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {suppliers
+              .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+              .map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
 
@@ -90,7 +101,7 @@ export default function Suppliers() {
       setLoading(true);
 
       const res = await fetch(
-        `http://localhost:5001/api/suppliers?search=${search}&filter=${filter}&limit=${limit}&offset=${(page - 1) * limit}`
+        `${API}/api/suppliers?search=${search}&filter=${filter}&limit=${limit}&offset=${(page - 1) * limit}`
       );
 
       const data = await res.json();
@@ -107,7 +118,7 @@ export default function Suppliers() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("http://localhost:5001/api/suppliers/stats");
+      const res = await fetch(`${API}/api/suppliers/stats`);
       const data = await res.json();
       setStatsData(data);
     } catch (err) {
@@ -126,7 +137,7 @@ export default function Suppliers() {
 
   const handleAddSupplier = async (formData) => {
     try {
-      const res = await fetch("http://localhost:5001/api/suppliers", {
+      const res = await fetch(`${API}/api/suppliers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -148,7 +159,7 @@ export default function Suppliers() {
   const handleExport = async () => {
     try {
       setExportLoading(true);
-      const url = `http://localhost:5001/api/suppliers/export?search=${search}&filter=${filter}`;
+      const url = `${API}/api/suppliers/export?search=${search}&filter=${filter}`;
       window.open(url, "_blank");
     } catch (err) {
       console.error("Export error:", err);
@@ -179,7 +190,7 @@ export default function Suppliers() {
         note: data.note || "",
       };
 
-      const res = await fetch("http://localhost:5001/api/suppliers/payment", {
+      const res = await fetch(`${API}/api/suppliers/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -200,6 +211,42 @@ export default function Suppliers() {
       console.error("Payment error:", err);
       alert("Failed to save payment");
     }
+  };
+
+  // --- HANDLERS FOR EDIT, DELETE, TOGGLE STATUS ---
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`${API}/api/suppliers/${id}`, { method: "DELETE" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error);
+        return;
+      }
+
+      fetchSuppliers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleStatus = async (supplier) => {
+    try {
+      await fetch(`${API}/api/suppliers/${supplier.id}/status`, {
+        method: "PATCH",
+      });
+
+      fetchSuppliers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const [editSupplier, setEditSupplier] = useState(null);
+
+  const handleEdit = (supplier) => {
+    setEditSupplier(supplier);
+    setShowModal(true);
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -230,7 +277,14 @@ export default function Suppliers() {
 
             <SuppliersStats suppliers={suppliers} statsData={statsData} />
 
-            <SuppliersTable suppliers={suppliers} loading={loading} onLedger={handleOpenLedger} />
+            <SuppliersTable
+              suppliers={suppliers}
+              loading={loading}
+              onLedger={handleOpenLedger}
+              onDelete={handleDelete}
+              onToggleStatus={handleToggleStatus}
+              onEdit={handleEdit}
+            />
 
             {/* PREMIUM PAGINATION */}
             {totalPages > 1 && (
@@ -303,11 +357,36 @@ export default function Suppliers() {
         {/* FOOTER */}
         <Footer />
 
-        {/* ADD SUPPLIER MODAL */}
+        {/* ADD/EDIT SUPPLIER MODAL */}
         {showModal && (
           <SupplierModal
-            onClose={() => setShowModal(false)}
-            onSave={handleAddSupplier}
+            key={editSupplier?.id || "new"}
+            supplier={editSupplier}
+            onClose={() => {
+              setShowModal(false);
+              setEditSupplier(null);
+            }}
+            onSave={async (formData) => {
+              if (editSupplier) {
+                const res = await fetch(`${API}/api/suppliers/${editSupplier.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(formData),
+                });
+
+                if (!res.ok) {
+                  const data = await res.json();
+                  alert(data.error || "Update failed");
+                  return;
+                }
+              } else {
+                await handleAddSupplier(formData);
+              }
+
+              setShowModal(false);
+              setEditSupplier(null);
+              fetchSuppliers();
+            }}
           />
         )}
 
