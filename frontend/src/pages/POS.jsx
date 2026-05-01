@@ -170,32 +170,44 @@ function POS() {
     const debugCustomerId = customer?.id || null;
     console.log("Sending:", debugCustomerId, book.id);
     if (existing) {
+      const newQty = existing.quantity + 1;
+
+      if (newQty > Number(book.stock || 0)) {
+        setToast(`Stock limit reached (${book.stock})`);
+        return;
+      }
+
       setCart(
         cart.map((i) =>
           i.id === book.id
-            ? { ...i, quantity: i.quantity + 1 }
+            ? { ...i, quantity: newQty }
             : i
         )
       );
       return;
     }
-  
+
     let discount = 0;
-  
+
     if (customer?.id) {
       try {
         const res = await getCustomerDiscount(customer.id, book.id);
-  
+
         console.log("DISCOUNT API:", res);
-  
+
         // ✅ FIXED (clean)
         discount = Number(res?.[0]?.discount || 0);
-  
+
       } catch (err) {
         console.error("Discount fetch error:", err);
       }
     }
-  
+
+    if (Number(book.stock || 0) < 1) {
+      setToast("Out of stock");
+      return;
+    }
+
     setCart([
       ...cart,
       {
@@ -341,6 +353,19 @@ function POS() {
   
     updateDiscounts();
   }, [customer]);
+  // Prevent manual quantity overflow in Cart
+  const updateQuantity = (id, qty, stock) => {
+    if (qty > stock) {
+      setToast(`Only ${stock} in stock`);
+      return;
+    }
+
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, quantity: qty } : item
+      )
+    );
+  };
   return (
     <div className="h-screen flex bg-gray-100 text-sm">
 
@@ -394,6 +419,7 @@ function POS() {
           <Cart
             cart={cart}
             setCart={setCart}
+            updateQuantity={updateQuantity}
             subtotal={subtotal}
             discount={discount}
             total={total}

@@ -134,29 +134,46 @@ function Cart({
   <input
     type="number"
     value={i.quantity}
-    onChange={(e) =>
+    onChange={(e) => {
+      const value = e.target.value === "" ? "" : Number(e.target.value);
+
+      // allow empty temporarily
+      if (value === "") {
+        setCart(cart.map(c =>
+          c.id === i.id ? { ...c, quantity: "" } : c
+        ));
+        return;
+      }
+
+      const stock = Number(i.stock || 0);
+
+      if (value > stock) {
+        alert(`Only ${stock} in stock`);
+        return;
+      }
+
       setCart(cart.map(c =>
         c.id === i.id
-          ? {
-              ...c,
-              quantity:
-                e.target.value === ""
-                  ? ""
-                  : Number(e.target.value)
-            }
+          ? { ...c, quantity: value }
           : c
-      ))
-    }
-    onBlur={() =>
-      setCart(cart.map(c =>
-        c.id === i.id
-          ? {
-              ...c,
-              quantity: c.quantity === "" ? 1 : c.quantity
-            }  
-          : c
-      ))
-    }
+      ));
+    }}
+    onBlur={() => {
+      const stock = Number(i.stock || 0);
+
+      setCart(cart.map(c => {
+        if (c.id !== i.id) return c;
+
+        let qty = c.quantity === "" ? 1 : Number(c.quantity);
+
+        if (qty > stock) {
+          alert(`Only ${stock} in stock`);
+          qty = stock;
+        }
+
+        return { ...c, quantity: qty };
+      }));
+    }}
     className="w-16 border rounded-lg text-center text-[13px] py-1 focus:ring-2 focus:ring-blue-500 outline-none"
   />
 </div>

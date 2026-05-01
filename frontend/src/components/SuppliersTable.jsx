@@ -16,7 +16,10 @@ const formatCurrency = (num) => {
 
 export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, onToggleStatus }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+    <div
+      className="bg-white rounded-2xl shadow-sm border overflow-hidden relative z-0"
+      style={{ pointerEvents: "auto" }}
+    >
       <table className="w-full text-sm">
 
         {/* HEADER */}
@@ -45,11 +48,11 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
           ) : (
             suppliers.map((s, index) => {
               const hasTransactions = Number(s.totalAmount || 0) > 0 || Number(s.totalPayments || 0) > 0;
-              const isActive = s.status ? s.status !== "inactive" : Number(s.is_active) === 1;
+              const isActive = Number(s.is_active) === 1;
               return (
               <tr
                 key={s.id}
-                className="border-t hover:bg-gray-50/70 transition-all duration-200"
+                className="border-t hover:bg-gray-50/70 transition-all duration-200 relative"
               >
                 <td className="px-4 py-4 text-gray-400">{index + 1}</td>
 
@@ -73,19 +76,23 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
 
                 {/* PAYABLE */}
                 <td className="px-4 py-4 text-right font-semibold">
-                  <span
-                    className={`${
-                      Number(
-                        s.balance ?? (Number(s.totalAmount || 0) - Number(s.totalPayments || 0))
-                      ) > 0
-                        ? "text-red-600"
-                        : "text-green-600"
-                    }`}
-                  >
-                    {formatCurrency(
-                      s.balance ?? (Number(s.totalAmount || 0) - Number(s.totalPayments || 0))
-                    )}
-                  </span>
+                  {(() => {
+                    // 🔥 Match ledger logic exactly
+                    const payable = Number(
+                      s.balance ??
+                        (
+                          Number(s.totalAmount || 0) +
+                          Number(s.totalReturns || 0) -
+                          Number(s.totalPayments || 0)
+                        )
+                    );
+
+                    return (
+                      <span className={`${payable > 0 ? "text-red-600" : "text-green-600"}`}>
+                        {formatCurrency(payable)}
+                      </span>
+                    );
+                  })()}
                 </td>
 
                 {/* DATE */}
@@ -95,21 +102,15 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
 
                 {/* STATUS */}
                 <td className="px-4 py-4 text-center">
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Are you sure you want to ${isActive ? "deactivate" : "activate"} this supplier?`)) {
-                        onToggleStatus && onToggleStatus(s);
-                      }
-                    }}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
                       isActive
-                        ? "bg-green-100 text-green-600 hover:bg-green-200"
-                        : "bg-red-100 text-red-600 hover:bg-red-200"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
                     }`}
-                    title="Click to toggle status"
                   >
                     {isActive ? "Active" : "Inactive"}
-                  </button>
+                  </span>
                 </td>
 
                 {/* ACTIONS */}
@@ -118,7 +119,21 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
 
                     <button
                       type="button"
-                      className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+
+                        const updated = {
+                          ...s,
+                          is_active: Number(s.is_active) === 1 ? 0 : 1,
+                        };
+
+                        onToggleStatus && onToggleStatus(updated);
+                      }}
+                      className={`p-2 rounded-lg border transition cursor-pointer shadow-sm hover:shadow relative z-20 ${
+                        isActive
+                          ? "text-green-600 border-green-200 hover:bg-green-50"
+                          : "text-red-600 border-red-200 hover:bg-red-50"
+                      }`}
                     >
                       <Eye size={16} />
                     </button>
@@ -130,33 +145,39 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
                         console.log("Edit clicked:", s);
                         onEdit && onEdit(s);
                       }}
-                      className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition cursor-pointer"
+                      className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 active:scale-90 transition cursor-pointer shadow-sm hover:shadow relative z-20 pointer-events-auto"
                     >
                       <Pencil size={16} />
                     </button>
 
                     {/* PREMIUM LEDGER BUTTON */}
                     <button
-                      onClick={() => onLedger && onLedger(s.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow-sm hover:shadow-md hover:scale-[1.02] transition"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log("LEDGER CLICKED:", s.id);
+                        onLedger && onLedger(s.id);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow-sm hover:shadow-md hover:scale-[1.02] transition cursor-pointer relative z-20 pointer-events-auto"
                     >
                       <BookOpen size={14} />
                       Ledger
                     </button>
 
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (hasTransactions) {
                           alert("Cannot delete supplier with transactions or payments");
                           return;
                         }
+                        console.log("DELETE CLICKED:", s.id);
                         onDelete && onDelete(s.id);
                       }}
                       disabled={hasTransactions}
-                      className={`p-2 rounded-lg border transition ${
+                      className={`p-2 rounded-lg border transition cursor-pointer relative z-20 pointer-events-auto ${
                         hasTransactions
                           ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                          : "border-gray-200 hover:bg-red-50 text-red-500"
+                          : "border-gray-200 hover:bg-red-50 text-red-500 active:scale-90 shadow-sm hover:shadow"
                       }`}
                     >
                       <Trash2 size={16} />

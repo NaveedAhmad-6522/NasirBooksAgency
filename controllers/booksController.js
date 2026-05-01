@@ -35,90 +35,120 @@ export const addBook = (req, res) => {
     return res.status(400).json({ error: "Title is required" });
   }
 
-  if (!supplier_id || !purchase_price || !stock) {
-    return res.status(400).json({ error: "Supplier, purchase price and quantity are required" });
-  }
-
-  db.beginTransaction((err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Transaction start failed" });
-    }
-
-    const insertBookSql = `
-      INSERT INTO books 
-      (title, publisher, category, edition, level, printed_price, current_price, purchase_price, stock, barcode)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    db.query(
-      insertBookSql,
-      [
-        title,
-        publisher,
-        category,
-        edition,
-        level,
-        printed_price,
-        current_price,
-        purchase_price,
-        0,
-        barcode,
-      ],
-      (err, result) => {
-        if (err) {
-          return db.rollback(() => {
-            console.error("Insert Book Error:", err);
-            res.status(500).json({ error: "Failed to add book" });
-          });
+  if (barcode) {
+    return db.query(
+      "SELECT id FROM books WHERE barcode = ?",
+      [barcode],
+      (err, existing) => {
+        if (err) return res.status(500).json({ error: "Barcode check failed" });
+        if (existing.length) {
+          return res.status(400).json({ error: "Barcode already exists" });
         }
 
-        const bookId = result.insertId;
+        // continue normal flow
+        proceedAddBook();
+      }
+    );
+  } else {
+    proceedAddBook();
+  }
 
-        const insertPurchaseSql = `
-          INSERT INTO purchases (book_id, supplier_id, quantity, purchase_price, discount)
-          VALUES (?, ?, ?, ?, ?)
+  function proceedAddBook() {
+    if (!supplier_id || purchase_price <= 0 || stock <= 0) {
+      return res.status(400).json({ error: "Supplier, purchase price and quantity are required" });
+    }
+
+    // 🔒 CHECK SUPPLIER ACTIVE
+    db.query("SELECT is_active FROM suppliers WHERE id = ?", [supplier_id], (err, result) => {
+      if (err) return res.status(500).json({ error: "Supplier check failed" });
+
+      if (!result.length || result[0].is_active === 0) {
+        return res.status(400).json({ error: "Supplier is inactive" });
+      }
+
+      // continue transaction below
+      db.beginTransaction((err) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Transaction start failed" });
+        }
+
+        const insertBookSql = `
+          INSERT INTO books 
+          (title, publisher, category, edition, level, printed_price, current_price, purchase_price, stock, barcode)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         db.query(
-          insertPurchaseSql,
-          [bookId, supplier_id, stock, purchase_price, discount || 0],
-          (err) => {
+          insertBookSql,
+          [
+            title,
+            publisher,
+            category,
+            edition,
+            level,
+            printed_price,
+            current_price,
+            purchase_price,
+            0,
+            barcode,
+          ],
+          (err, result) => {
             if (err) {
               return db.rollback(() => {
-                console.error("Insert Purchase Error:", err);
-                res.status(500).json({ error: "Failed to add purchase" });
+                console.error("Insert Book Error:", err);
+                res.status(500).json({ error: "Failed to add book" });
               });
             }
 
-            const updateStockSql = `
-              UPDATE books SET stock = stock + ? WHERE id = ?
+            const bookId = result.insertId;
+
+            const insertPurchaseSql = `
+              INSERT INTO purchases (book_id, supplier_id, quantity, purchase_price, printed_price, discount)
+              VALUES (?, ?, ?, ?, ?, ?)
             `;
 
-            db.query(updateStockSql, [stock, bookId], (err) => {
-              if (err) {
-                return db.rollback(() => {
-                  console.error("Stock Update Error:", err);
-                  res.status(500).json({ error: "Stock update failed" });
-                });
-              }
-
-              db.commit((err) => {
+            db.query(
+              insertPurchaseSql,
+              [bookId, supplier_id, stock, purchase_price, printed_price, discount || 0],
+              (err) => {
                 if (err) {
                   return db.rollback(() => {
-                    console.error("Commit Error:", err);
-                    res.status(500).json({ error: "Commit failed" });
+                    console.error("Insert Purchase Error:", err);
+                    res.status(500).json({ error: "Failed to add purchase" });
                   });
                 }
 
-                res.json({ message: "Book and purchase created successfully" });
-              });
-            });
+                const updateStockSql = `
+                  UPDATE books SET stock = stock + ? WHERE id = ?
+                `;
+
+                db.query(updateStockSql, [stock, bookId], (err) => {
+                  if (err) {
+                    return db.rollback(() => {
+                      console.error("Stock Update Error:", err);
+                      res.status(500).json({ error: "Stock update failed" });
+                    });
+                  }
+
+                  db.commit((err) => {
+                    if (err) {
+                      return db.rollback(() => {
+                        console.error("Commit Error:", err);
+                        res.status(500).json({ error: "Commit failed" });
+                      });
+                    }
+
+                    res.json({ message: "Book and purchase created successfully" });
+                  });
+                });
+              }
+            );
           }
         );
-      }
-    );
-  });
+      });
+    });
+  }
 };
 
 /* =========================
@@ -154,7 +184,8 @@ export const getBooks = (req, res) => {
 
       CAST(b.printed_price AS DECIMAL(10,2)) AS printed_price,
       CAST(b.current_price AS DECIMAL(10,2)) AS current_price,
-      CAST(IFNULL(p.purchase_price, 0) AS DECIMAL(10,2)) AS purchase_price,
+      CAST(IFNULL(b.purchase_price, 0) AS DECIMAL(10,2)) AS purchase_price,
+      CAST(IFNULL(p.purchase_price, 0) AS DECIMAL(10,2)) AS last_purchase_price,
 
       CAST(b.stock AS SIGNED) AS stock,
 
@@ -223,6 +254,7 @@ export const searchBooks = (req, res) => {
     FROM books
     WHERE (title LIKE ? OR publisher LIKE ?) AND is_active = 1
     ORDER BY id DESC
+    LIMIT 20
   `;
 
   db.query(sql, [`%${q}%`, `%${q}%`], (err, result) => {
@@ -360,74 +392,110 @@ export const getBookById = (req, res) => {
 export const restockBook = (req, res) => {
   const { id } = req.params;
 
-  let { supplier_id, quantity, purchase_price, percentage } = req.body;
+  let { supplier_id, quantity, purchase_price, percentage, printed_price } = req.body;
 
   quantity = Number(quantity) || 0;
   purchase_price = Number(purchase_price) || 0;
   percentage = Number(percentage) || 0;
 
-  if (!supplier_id || !quantity || !purchase_price) {
+  if (!supplier_id || quantity <= 0 || purchase_price <= 0) {
     return res.status(400).json({
       error: "Supplier, quantity and purchase price are required",
     });
   }
+ 
+  // 🔒 CHECK SUPPLIER ACTIVE
+  db.query("SELECT is_active FROM suppliers WHERE id = ?", [supplier_id], (err2, supResult) => {
+    if (err2) return res.status(500).json({ error: "Supplier check failed" });
 
-  db.query("SELECT is_active FROM books WHERE id = ?", [id], (err, result) => {
-    if (err) return res.status(500).json({ error: "Fetch failed" });
-
-    if (!result.length) return res.status(404).json({ error: "Book not found" });
-
-    if (!result[0].is_active) {
-      return res.status(400).json({ error: "Cannot restock inactive book" });
+    if (!supResult.length || supResult[0].is_active === 0) {
+      return res.status(400).json({ error: "Supplier is inactive" });
     }
 
-    db.beginTransaction((err) => {
-      if (err) {
-        return res.status(500).json({ error: "Transaction start failed" });
+    // continue existing logic below
+    db.query("SELECT is_active FROM books WHERE id = ?", [id], (err, result) => {
+      if (err) return res.status(500).json({ error: "Fetch failed" });
+
+      if (!result.length) return res.status(404).json({ error: "Book not found" });
+
+      if (!result[0].is_active) {
+        return res.status(400).json({ error: "Cannot restock inactive book" });
       }
 
-      // 1️⃣ Insert purchase
-      const purchaseSql = `
-        INSERT INTO purchases (book_id, supplier_id, quantity, purchase_price, discount)
-        VALUES (?, ?, ?, ?, ?)
-      `;
+      db.beginTransaction((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Transaction start failed" });
+        }
 
-      db.query(
-        purchaseSql,
-        [id, supplier_id, quantity, purchase_price, percentage || 0],
-        (err) => {
-          if (err) {
-            return db.rollback(() => {
-              console.error(err);
-              res.status(500).json({ error: "Failed to insert purchase" });
-            });
-          }
+        // 1️⃣ Insert purchase
+        const purchaseSql = `
+          INSERT INTO purchases (book_id, supplier_id, quantity, purchase_price, printed_price, discount)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `;
 
-          // 2️⃣ Update stock
-          const stockSql = `
-            UPDATE books SET stock = stock + ? WHERE id = ?
-          `;
-
-          db.query(stockSql, [quantity, id], (err) => {
+        db.query(
+          purchaseSql,
+          [id, supplier_id, quantity, purchase_price, printed_price || null, percentage || 0],
+          (err) => {
             if (err) {
               return db.rollback(() => {
                 console.error(err);
-                res.status(500).json({ error: "Stock update failed" });
+                res.status(500).json({ error: "Failed to insert purchase" });
               });
             }
 
-            db.commit((err) => {
+            // 2️⃣ Update stock
+            const stockSql = `
+              UPDATE books SET stock = stock + ? WHERE id = ?
+            `;
+
+            db.query(stockSql, [quantity, id], (err) => {
               if (err) {
                 return db.rollback(() => {
-                  res.status(500).json({ error: "Commit failed" });
+                  console.error(err);
+                  res.status(500).json({ error: "Stock update failed" });
                 });
               }
 
-              res.json({ message: "Stock restocked successfully" });
+              // 🔥 OPTIONAL: update printed price if provided
+              if (printed_price && Number(printed_price) > 0) {
+                const updatePriceSql = `
+                  UPDATE books SET printed_price = ?, current_price = ? WHERE id = ?
+                `;
+
+                return db.query(updatePriceSql, [Number(printed_price), Number(printed_price), id], (err) => {
+                  if (err) {
+                    return db.rollback(() => {
+                      console.error(err);
+                      res.status(500).json({ error: "Printed price update failed" });
+                    });
+                  }
+
+                  db.commit((err) => {
+                    if (err) {
+                      return db.rollback(() => {
+                        res.status(500).json({ error: "Commit failed" });
+                      });
+                    }
+
+                    res.json({ message: "Stock restocked & price updated" });
+                  });
+                });
+              }
+
+              db.commit((err) => {
+                if (err) {
+                  return db.rollback(() => {
+                    res.status(500).json({ error: "Commit failed" });
+                  });
+                }
+
+                res.json({ message: "Stock restocked successfully" });
+              });
             });
-          });
-        }
-      );
+          }
+        );
+      });
     });
   });
 };
@@ -461,6 +529,16 @@ export const updateBook = async (req, res) => {
       return res.status(404).json({ error: "Book not found" });
     }
 
+    // 🔥 Save price history
+    const oldPrinted = existing[0].printed_price;
+
+    if (Number(printed_price) !== Number(oldPrinted)) {
+      await connection.query(
+        "INSERT INTO price_history (book_id, old_price, new_price) VALUES (?, ?, ?)",
+        [id, oldPrinted, Number(printed_price)]
+      );
+    }
+
     // Update book
     await connection.query(
       `UPDATE books SET 
@@ -470,7 +548,6 @@ export const updateBook = async (req, res) => {
         edition = ?,
         printed_price = ?,
         current_price = ?,
-        purchase_price = ?,
         stock = ?,
         level = ?
       WHERE id = ?`,
@@ -481,7 +558,6 @@ export const updateBook = async (req, res) => {
         edition,
         Number(printed_price),
         Number(printed_price),
-        purchase_price ? Number(purchase_price) : null,
         stock ? Number(stock) : 0,
         level && level.trim() !== "" ? level.trim() : null,
         id,

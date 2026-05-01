@@ -23,6 +23,7 @@ export default function SupplierModal({ onClose, onSave, supplier }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    console.log("FORM SUBMIT TRIGGERED:", form);
 
     if (!form.name) {
       alert("Supplier name is required");
@@ -33,7 +34,7 @@ export default function SupplierModal({ onClose, onSave, supplier }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 pointer-events-auto">
 
       <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg space-y-4">
 
@@ -79,6 +80,7 @@ export default function SupplierModal({ onClose, onSave, supplier }) {
 
             <button
               type="submit"
+              onClick={() => console.log("SUBMIT BUTTON CLICKED")}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg"
             >
               {supplier ? "Update" : "Save"}

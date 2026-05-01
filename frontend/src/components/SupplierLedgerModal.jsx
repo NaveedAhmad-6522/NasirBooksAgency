@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import SupplierReturn from "./SupplierReturn";
 
 export default function SupplierLedgerPage() {
   const { id } = useParams();
@@ -11,11 +12,39 @@ export default function SupplierLedgerPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ amount: "", note: "" });
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(20);
+  // const [visibleCount, setVisibleCount] = useState(20);
+  const [showReturn, setShowReturn] = useState(false);
+  // --- Infinite scroll states
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    fetchLedger();
-  }, []);
+    setHasMore(true);
+    fetchInitial();
+  }, [id]);
+
+  const initialAbortRef = useRef(false);
+
+  useEffect(() => {
+    initialAbortRef.current = false;
+    return () => {
+      initialAbortRef.current = true;
+    };
+  }, [id]);
+
+  const fetchInitial = async () => {
+    try {
+      const res = await fetch(
+        `http://localhost:5001/api/suppliers/${id}/ledger`
+      );
+      const result = await res.json();
+      if (initialAbortRef.current) return;
+      setData(result);
+      setHasMore(typeof result.hasMore === "boolean" ? result.hasMore : false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchLedger = async () => {
     try {
@@ -23,101 +52,154 @@ export default function SupplierLedgerPage() {
         `http://localhost:5001/api/suppliers/${id}/ledger`
       );
       const result = await res.json();
+
       setData(result);
+      setHasMore(typeof result.hasMore === "boolean" ? result.hasMore : false);
     } catch (err) {
       console.error("Ledger fetch error:", err);
     }
   };
 
-  const handleOpenInvoice = async (reference, type) => {
-    try {
-      let url = "";
+  const fetchNextPage = async () => {
+    if (loadingMore || !hasMore || !data?.nextCursor) return;
 
-      if (type === "purchase") {
-        const date = reference.replace("INV-", "");
-        url = `http://localhost:5001/api/suppliers/${id}/invoice/${date}`;
-      } else {
-        const paymentId = reference.replace("PAY-", "");
-        url = `http://localhost:5001/api/suppliers/payment/${paymentId}`;
+    setLoadingMore(true);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5001/api/suppliers/${id}/ledger?cursor=${encodeURIComponent(
+          data.nextCursor
+        )}`
+      );
+      const result = await res.json();
+
+      setHasMore(typeof result.hasMore === "boolean" ? result.hasMore : false);
+
+      if (initialAbortRef.current) return;
+
+      setData((prev) => ({
+        ...result,
+        ledger: [...(prev.ledger || []), ...(result.ledger || [])],
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+
+    setLoadingMore(false);
+  };
+
+  // --- Infinite scroll handler
+  useEffect(() => {
+    let scrollTimeout;
+    const handleScroll = () => {
+      if (scrollTimeout) return;
+      scrollTimeout = setTimeout(() => {
+        if (loadingMore || !hasMore || !data || !(data.ledger || []).length) {
+          scrollTimeout = null;
+          return;
+        }
+        if (
+          window.innerHeight + window.scrollY >=
+          document.body.offsetHeight - 300
+        ) {
+          fetchNextPage();
+        }
+        scrollTimeout = null;
+      }, 200);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [hasMore, loadingMore, data]);
+
+  const handleOpenInvoice = async (reference, type) => {
+    // 🔥 ALWAYS derive type from reference (ignore passed type completely)
+    let url = "";
+
+    let finalType = null;
+    let date = null;
+
+    if (reference.startsWith("RINV-")) {
+      finalType = "return";
+      date = reference.replace("RINV-", "");
+    } else if (reference.startsWith("INV-")) {
+      finalType = "purchase";
+      date = reference.replace("INV-", "");
+    } else if (reference.startsWith("PAY-")) {
+      const paymentId = reference.replace("PAY-", "");
+      url = `http://localhost:5001/api/suppliers/payment/${paymentId}`;
+    }
+
+    if (!url) {
+      const encodedDate = encodeURIComponent(date);
+      url = `http://localhost:5001/api/suppliers/${id}/invoice/${encodedDate}?type=${finalType}`;
+    }
+
+    // 🔥 HARD DEBUG (do not remove)
+    console.log("DEBUG CLICK:", {
+      reference,
+      derivedType: finalType,
+      date,
+      url
+    });
+
+    try {
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("Invoice fetch failed:", errText);
+        alert("Failed to load invoice");
+        return;
       }
 
-      const res = await fetch(url);
       const result = await res.json();
-      setInvoiceData({ ...result, type });
+
+      if (!result) {
+        alert("No invoice data found");
+        return;
+      }
+
+      // Payment response fix
+      if (finalType === null) {
+        // payment response fix
+        const paymentData = result.payment || result;
+        setInvoiceData({
+          ...paymentData,
+          type: "payment"
+        });
+      } else {
+        setInvoiceData({ ...result, type: finalType });
+      }
     } catch (err) {
       console.error("Invoice fetch error:", err);
+      alert("Error loading invoice");
     }
   };
 
   if (!data) return <div className="p-6">Loading...</div>;
 
-  const { supplier, ledger } = data;
+  const { supplier, ledger, summary } = data;
+  const totalPurchases = summary?.totalPurchases || 0;
+  const totalPayments = summary?.totalPayments || 0;
+  const totalReturns = summary?.totalReturns || 0;
+  const payable = summary?.payable || 0;
 
-  // 🔥 Group purchases by date (daily invoice)
-  const groupedLedger = [];
-  const purchaseMap = {};
+  const finalLedger = data.ledger || [];
 
-  ledger.forEach((l) => {
-    const localDate = new Date(l.created_at);
-    const dateKey =
-      localDate.getFullYear() +
-      "-" +
-      String(localDate.getMonth() + 1).padStart(2, "0") +
-      "-" +
-      String(localDate.getDate()).padStart(2, "0");
-
-    if (l.type === "purchase") {
-      if (!purchaseMap[dateKey]) {
-        purchaseMap[dateKey] = {
-          type: "purchase",
-          created_at: l.created_at,
-          reference_id: `INV-${dateKey}`,
-          amount: 0,
-          items: [],
-        };
-        groupedLedger.push(purchaseMap[dateKey]);
-      }
-
-      purchaseMap[dateKey].amount += Number(l.amount);
-      purchaseMap[dateKey].items.push(l);
-    } else {
-      groupedLedger.push(l);
-    }
-  });
-
-  // 🔥 Recalculate running balance
-  let runningBalance = 0;
-  const sortedLedger = [...groupedLedger].sort(
-    (a, b) => new Date(a.created_at) - new Date(b.created_at)
-  );
-  const calculated = sortedLedger.map((l) => {
-    if (l.type === "purchase") {
-      runningBalance += Number(l.amount);
-    } else {
-      runningBalance -= Number(l.amount);
-    }
-    return { ...l, balance: runningBalance };
-  });
-  const finalLedger = [...calculated].reverse();
-
-  // 🔥 Calculations
-  const totalPurchases = ledger
-    .filter((l) => l.type === "purchase")
-    .reduce((sum, l) => sum + Number(l.amount), 0);
-
-  const totalPayments = ledger
-    .filter((l) => l.type === "payment")
-    .reduce((sum, l) => sum + Number(l.amount), 0);
-
-  const payable = totalPurchases - totalPayments;
-
-  // Helper to format currency (M for millions)
+  // Helper to format currency (M for millions, improved logic)
   const formatCurrency = (value) => {
-    const num = Number(value);
+    const num = Number(value || 0);
+
     if (Math.abs(num) >= 1000000) {
-      return (num / 1000000).toFixed(2) + "M";
+      return (num / 1000000).toFixed(2).replace(/\.00$/, "") + "M";
     }
-    return num.toLocaleString();
+
+    if (Math.abs(num) >= 1000) {
+      return num.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    }
+
+    return num.toFixed(0);
   };
 
   // --- FILTER LOGIC ---
@@ -130,7 +212,7 @@ export default function SupplierLedgerPage() {
     );
   });
 
-  const visibleLedger = filteredLedger.slice(0, visibleCount);
+  const visibleLedger = filteredLedger;
 
   return (
     <div className="p-6 space-y-6 print:p-0 print:space-y-0">
@@ -164,7 +246,10 @@ export default function SupplierLedgerPage() {
                 Date: new Date(l.created_at).toLocaleDateString(),
                 Type: l.type,
                 Reference: l.reference_id,
-                Purchase: l.type === "purchase" ? l.amount : "",
+                Purchase:
+                  l.type === "purchase" || l.type === "return"
+                    ? l.amount
+                    : "",
                 Payment: l.type === "payment" ? l.amount : "",
                 Balance: l.balance,
               }));
@@ -198,6 +283,12 @@ export default function SupplierLedgerPage() {
             className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium shadow-sm transition"
           >
             + Add Payment
+          </button>
+          <button
+            onClick={() => setShowReturn(true)}
+            className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium shadow-sm transition"
+          >
+            + Return
           </button>
         </div>
       </div>
@@ -233,7 +324,7 @@ export default function SupplierLedgerPage() {
         <div className="bg-white p-4 rounded-xl shadow-sm border">
           <p className="text-xs text-gray-500">Transactions</p>
           <h2 className="text-lg font-semibold mt-1">
-            {ledger.length}
+          {data.totalTransactions || 0}
           </h2>
         </div>
       </div>
@@ -250,7 +341,6 @@ export default function SupplierLedgerPage() {
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
-              setVisibleCount(20);
             }}
           />
         </div>
@@ -262,15 +352,15 @@ export default function SupplierLedgerPage() {
               <th className="px-4 py-3 text-left">Type</th>
               <th className="px-4 py-3 text-left">Reference</th>
               <th className="px-4 py-3 text-left">Description</th>
-              <th className="px-4 py-3 text-right">Purchase (Dr)</th>
+              <th className="px-4 py-3 text-right">Purchase / Return (Dr)</th>
               <th className="px-4 py-3 text-right">Payment (Cr)</th>
               <th className="px-4 py-3 text-right">Balance</th>
             </tr>
           </thead>
 
           <tbody>
-            {visibleLedger.map((l, i) => (
-              <tr key={i} className="border-t hover:bg-indigo-50 transition even:bg-gray-50/30">
+            {visibleLedger.map((l) => (
+              <tr key={l.reference_id + l.created_at} className="border-t hover:bg-indigo-50 transition even:bg-gray-50/30">
 
                 <td className="px-4 py-3">
                   {new Date(l.created_at).toLocaleDateString()}
@@ -281,10 +371,16 @@ export default function SupplierLedgerPage() {
                     className={`px-2 py-1 rounded-full text-xs ${
                       l.type === "purchase"
                         ? "bg-blue-100 text-blue-600"
+                        : l.type === "return"
+                        ? "bg-red-100 text-red-600"
                         : "bg-green-100 text-green-600"
                     }`}
                   >
-                    {l.type === "purchase" ? "Invoice" : "Payment"}
+                    {l.type === "purchase"
+                      ? "Invoice"
+                      : l.type === "return"
+                      ? "Return"
+                      : "Payment"}
                   </span>
                 </td>
 
@@ -298,12 +394,16 @@ export default function SupplierLedgerPage() {
                 <td className="px-4 py-3 text-gray-500">
                   {l.type === "purchase"
                     ? "Daily Purchase Invoice"
+                    : l.type === "return"
+                    ? "Return Invoice"
                     : "Payment Receipt"}
                 </td>
 
                 {/* Purchase */}
                 <td className="px-4 py-3 text-right">
                   {l.type === "purchase"
+                    ? `Rs. ${Number(l.amount).toLocaleString()}`
+                    : l.type === "return"
                     ? `Rs. ${Number(l.amount).toLocaleString()}`
                     : "-"}
                 </td>
@@ -327,16 +427,7 @@ export default function SupplierLedgerPage() {
             ))}
           </tbody>
         </table>
-        {visibleCount < filteredLedger.length && (
-          <div className="p-4 text-center">
-            <button
-              onClick={() => setVisibleCount((prev) => prev + 20)}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-100"
-            >
-              Load More
-            </button>
-          </div>
-        )}
+
       </div>
     {/* Payment Modal */}
     {showPaymentModal && (
@@ -352,7 +443,7 @@ export default function SupplierLedgerPage() {
           </div>
 
           <input
-            placeholder="Amount"
+            placeholder="Amount (use negative for refund)"
             className="w-full border px-3 py-2 rounded mb-3"
             value={paymentForm.amount}
             onChange={(e) =>
@@ -375,19 +466,30 @@ export default function SupplierLedgerPage() {
             <button
               className="bg-indigo-600 text-white px-4 py-2 rounded"
               onClick={async () => {
-                await fetch("http://localhost:5001/api/suppliers/payment", {
+                const amount = Number(paymentForm.amount);
+                if (isNaN(amount) || amount === 0) {
+                  alert("Enter a valid amount");
+                  return;
+                }
+                const res = await fetch("http://localhost:5001/api/suppliers/payment", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     supplier_id: id,
-                    amount: Number(paymentForm.amount),
+                    amount: amount, // allow negative or positive
                     note: paymentForm.note,
                   }),
                 });
 
+                if (!res.ok) {
+                  const err = await res.json();
+                  alert(err.error || "Payment failed");
+                  return;
+                }
+
                 setShowPaymentModal(false);
                 setPaymentForm({ amount: "", note: "" });
-                fetchLedger();
+                fetchInitial();
               }}
             >
               Save
@@ -411,8 +513,16 @@ export default function SupplierLedgerPage() {
             </div>
 
             <div className="text-right">
-              <h2 className="text-lg font-semibold">{invoiceData.type === "purchase" ? "INVOICE" : "PAYMENT"}</h2>
-              <p className="text-xs text-gray-500 mt-1">{invoiceData.type === "purchase" ? invoiceData.invoice_date : new Date(invoiceData.created_at).toLocaleDateString()}</p>
+              <h2 className="text-lg font-semibold">{invoiceData.type === "purchase"
+                ? "INVOICE"
+                : invoiceData.type === "return"
+                ? "RETURN INVOICE"
+                : "PAYMENT"}</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                {invoiceData.type === "purchase" || invoiceData.type === "return"
+                  ? (invoiceData.invoice_date || new Date(invoiceData.created_at).toLocaleDateString())
+                  : new Date(invoiceData.created_at).toLocaleDateString()}
+              </p>
               <button onClick={() => setInvoiceData(null)} className="mt-2 text-gray-400 hover:text-black">✕</button>
             </div>
           </div>
@@ -425,28 +535,32 @@ export default function SupplierLedgerPage() {
               <p className="text-sm text-gray-500">{supplier?.phone}</p>
             </div>
 
-            {invoiceData.type === "purchase" && (
+            {(invoiceData.type === "purchase" || invoiceData.type === "return") && (
               <div className="text-right">
                 <p className="text-xs text-gray-500">Invoice Total</p>
                 <p className="text-xl font-bold text-indigo-600">
-                  Rs. {invoiceData.items?.reduce((s,i)=>s+Number(i.total),0).toLocaleString()}
+                  Rs. {formatCurrency((invoiceData.items || []).reduce((s,i)=>s+Number(i.total || 0),0))}
                 </p>
               </div>
             )}
           </div>
 
-          {/* PURCHASE TABLE */}
-          {invoiceData.type === "purchase" && (
+          {/* PURCHASE/RETURN TABLE */}
+          {(invoiceData.type === "purchase" || invoiceData.type === "return") && (
             <table className="w-full text-sm border rounded-xl overflow-hidden print:break-inside-avoid">
               <thead className="bg-indigo-600 text-white text-xs">
                 <tr>
                   <th className="px-3 py-2 text-left">#</th>
                   <th className="px-3 py-2 text-left">Book</th>
                   <th className="px-3 py-2 text-right">Qty</th>
-                  <th className="px-3 py-2 text-right">Purchase</th>
+                  <th className="px-3 py-2 text-right">
+                    {invoiceData.type === "return" ? "Return" : "Purchase"}
+                  </th>
                   <th className="px-3 py-2 text-right">Printed</th>
                   <th className="px-3 py-2 text-right">%</th>
-                  <th className="px-3 py-2 text-right">Discounted Price</th>
+                  <th className="px-3 py-2 text-right">
+                    {invoiceData.type === "return" ? "Return Value" : "Discounted Price"}
+                  </th>
                   <th className="px-3 py-2 text-right">Total</th>
                 </tr>
               </thead>
@@ -457,17 +571,26 @@ export default function SupplierLedgerPage() {
                     <td className="px-3 py-2">{i+1}</td>
                     <td className="px-3 py-2">{item.book_name}</td>
                     <td className="px-3 py-2 text-right">{item.quantity}</td>
-                    <td className="px-3 py-2 text-right">{Number(item.purchase_price).toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right">{Number(item.printed_price || 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(item.purchase_price)}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(item.printed_price || 0)}</td>
                     <td className="px-3 py-2 text-right">
-                      {item.printed_price
+                      {invoiceData.type === "return"
+                        ? "-"
+                        : item.printed_price
                         ? ((1 - Number(item.purchase_price) / Number(item.printed_price)) * 100).toFixed(2)
                         : 0}%
                     </td>
                     <td className="px-3 py-2 text-right text-green-600">
-                      {(Number(item.printed_price || 0) - Number(item.purchase_price)) * Number(item.quantity) || 0}
+                      {invoiceData.type === "return"
+                        ? "-"
+                        : formatCurrency(
+                            Math.round(
+                              (Number(item.printed_price || 0) - Number(item.purchase_price)) *
+                              Number(item.quantity || 0)
+                            )
+                          )}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold">{Number(item.total).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -477,15 +600,15 @@ export default function SupplierLedgerPage() {
                   <td colSpan="2" className="px-3 py-2 text-right">Totals</td>
 
                   <td className="px-3 py-2 text-right">
-                    {invoiceData.items?.reduce((s,i)=>s+Number(i.quantity),0)}
+                    {(invoiceData.items || []).reduce((s,i)=>s+Number(i.quantity || 0),0)}
                   </td>
 
                 <td className="px-3 py-2 text-right">
-                    {invoiceData.items?.reduce((s,i)=>s+Number(i.purchase_price * i.quantity),0).toLocaleString()}
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>s+Number((i.purchase_price || 0) * (i.quantity || 0)),0))}
                   </td>
 
                   <td className="px-3 py-2 text-right">
-                    {invoiceData.items?.reduce((s,i)=>s+Number((i.printed_price || 0) * i.quantity),0).toLocaleString()}
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>s+Number((i.printed_price || 0) * (i.quantity || 0)),0))}
                   </td>
 
                   <td className="px-3 py-2 text-right">
@@ -493,11 +616,17 @@ export default function SupplierLedgerPage() {
                   </td>
 
                   <td className="px-3 py-2 text-right text-green-600">
-                    {invoiceData.items?.reduce((s,i)=>s+((Number(i.printed_price||0)-Number(i.purchase_price))*Number(i.quantity)),0).toLocaleString()}
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>{
+                      const printed = Number(i.printed_price || 0);
+                      const purchase = Number(i.purchase_price || 0);
+                      const qty = Number(i.quantity || 0);
+                      if (Number(i.total) < 0) return s; // ignore returns
+                      return s + ((printed - purchase) * qty);
+                    },0))}
                   </td>
 
                   <td className="px-3 py-2 text-right text-indigo-700">
-                    {invoiceData.items?.reduce((s,i)=>s+Number(i.total),0).toLocaleString()}
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>s+Number(i.total || 0),0))}
                   </td>
                 </tr>
 
@@ -505,12 +634,13 @@ export default function SupplierLedgerPage() {
                 <tr>
                   <td colSpan="7" className="px-3 py-2 text-right text-gray-500">Discount</td>
                   <td className="px-3 py-2 text-right text-red-600">
-                    {invoiceData.items?.reduce((s,i)=>{
-                      const printed = Number(i.printed_price||0);
-                      const purchase = Number(i.purchase_price);
-                      const qty = Number(i.quantity);
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>{
+                      const printed = Number(i.printed_price || 0);
+                      const purchase = Number(i.purchase_price || 0);
+                      const qty = Number(i.quantity || 0);
+                      if (Number(i.total) < 0) return s;
                       return s + ((printed - purchase) * qty);
-                    },0).toLocaleString()}
+                    },0))}
                   </td>
                 </tr>
 
@@ -518,7 +648,7 @@ export default function SupplierLedgerPage() {
                 <tr className="bg-indigo-50">
                   <td colSpan="7" className="px-3 py-3 text-right font-bold">Final Amount</td>
                   <td className="px-3 py-3 text-right font-bold text-indigo-700 text-lg">
-                    {invoiceData.items?.reduce((s,i)=>s+Number(i.total),0).toLocaleString()}
+                    {formatCurrency((invoiceData.items || []).reduce((s,i)=>s+Number(i.total || 0),0))}
                   </td>
                 </tr>
               </tfoot>
@@ -541,7 +671,7 @@ export default function SupplierLedgerPage() {
               <div>
                 <p className="text-gray-500 text-sm">Amount Paid</p>
                 <h2 className="text-3xl font-bold text-green-600">
-                  Rs. {Number(invoiceData.amount).toLocaleString()}
+                  Rs. {formatCurrency(Number(invoiceData.amount || 0))}
                 </h2>
               </div>
             </div>
@@ -559,6 +689,17 @@ export default function SupplierLedgerPage() {
 
         </div>
       </div>
+    )}
+    {showReturn && (
+      <SupplierReturn
+        supplier={supplier}
+        supplier_id={id}
+        onClose={() => setShowReturn(false)}
+        onSuccess={() => {
+          setShowReturn(false);
+          fetchInitial();
+        }}
+      />
     )}
   </div>
   );

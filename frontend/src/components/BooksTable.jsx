@@ -21,6 +21,7 @@ function BooksTable({ books, onToggleStatus, onEdit, onDelete, onRestock }) {
             <th className="p-4 text-left">Title</th>
             <th className="p-4 text-left">Category</th>
             <th className="p-4 text-left">Publisher</th>
+            <th className="p-4 text-left">Edition</th>
             <th className="p-4 text-left">Price</th>
             <th className="p-4 text-left">Stock</th>
             <th className="p-4 text-left">Status</th>
@@ -72,13 +73,17 @@ function BooksTable({ books, onToggleStatus, onEdit, onDelete, onRestock }) {
                   </span>
                 </td>
 
+                {/* Edition */}
+                <td className="p-4">
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                    {book.edition || "-"}
+                  </span>
+                </td>
+
                 {/* Price */}
                 <td className="p-4">
                   <div className="text-green-600 font-semibold">
-                    Rs {book.current_price}
-                  </div>
-                  <div className="text-xs text-gray-400 line-through">
-                    Rs {book.printed_price}
+                    Rs {book.printed_price || book.current_price}
                   </div>
                 </td>
 

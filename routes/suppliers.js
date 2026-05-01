@@ -8,7 +8,9 @@ import { getSuppliers ,
     getSupplierPaymentDetails,
     updateSupplier,
     deleteSupplier,
-    toggleSupplierStatus
+    toggleSupplierStatus,
+    returnToSupplier,
+    getSupplierBooks
     
 } from "../controllers/suppliersController.js";
 
@@ -20,6 +22,8 @@ router.post("/payment", addSupplierPayment);
 router.get("/payment/:id", getSupplierPaymentDetails);
 router.get("/:id/invoice/:date", getSupplierInvoiceDetails);
 router.get("/:id/ledger", getSupplierLedger);
+router.get("/:id/books", getSupplierBooks);
+router.post("/return", returnToSupplier);
 router.put("/:id", updateSupplier);
 router.delete("/:id", deleteSupplier);
 router.patch("/:id/status", toggleSupplierStatus);

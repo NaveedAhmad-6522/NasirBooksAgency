@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function AddBook({ existingBook, onSuccess, onCancel }) {
   const [book, setBook] = useState({
@@ -14,36 +14,61 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
     percentage: existingBook?.percentage || "",
   });
 
-  const [suppliers, setSuppliers] = useState([]);
+  const [suppliers] = useState([]);
+  const [supplierSearch, setSupplierSearch] = useState(existingBook?.supplier_name || "");
+  const [filteredSuppliers, setFilteredSuppliers] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const cacheRef = useRef({});
+  const controllerRef = useRef(null);
+  const dropdownRef = useRef();
 
   useEffect(() => {
-    fetch("http://localhost:5001/api/suppliers")
-      .then(res => res.json())
-      .then(data => setSuppliers(Array.isArray(data) ? data : data?.data || []))
-      .catch(err => console.error("Supplier fetch error", err));
-  }, []);
-
-  useEffect(() => {
-    if (existingBook?.id) {
-      fetch(`http://localhost:5001/api/books/${existingBook.id}`)
-        .then(res => res.json())
-        .then(data => {
-          setBook({
-            title: data.title || "",
-            publisher: data.publisher || "",
-            category: data.category || "",
-            edition: data.edition || "",
-            printed_price: data.printed_price || "",
-            purchase_price: data.purchase_price || "",
-            stock: data.stock || "",
-            level: data.level ?? "",
-            supplier_id: data.supplier_id || "",
-            percentage: data.percentage || "",
-          });
-        })
-        .catch(err => console.error("Fetch book for edit error", err));
+    if (!supplierSearch.trim()) {
+      setFilteredSuppliers([]);
+      return;
     }
-  }, [existingBook]);
+
+    if (cacheRef.current[supplierSearch]) {
+      setFilteredSuppliers(cacheRef.current[supplierSearch]);
+      return;
+    }
+
+    const delay = setTimeout(async () => {
+      try {
+        if (controllerRef.current) controllerRef.current.abort();
+        const controller = new AbortController();
+        controllerRef.current = controller;
+
+        const res = await fetch(
+          `http://localhost:5001/api/suppliers?search=${supplierSearch}&filter=active&limit=10`,
+          { signal: controller.signal }
+        );
+
+        const data = await res.json();
+        const rows = data.data || data;
+
+        cacheRef.current[supplierSearch] = rows;
+        setFilteredSuppliers(rows);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Supplier search error", err);
+        }
+      }
+    }, 300);
+
+    return () => clearTimeout(delay);
+  }, [supplierSearch]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -79,6 +104,11 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
 
     try {
       console.log("BOOK STATE BEFORE SUBMIT:", book);
+
+      if (!existingBook && !book.supplier_id) {
+        alert("Please select a supplier");
+        return;
+      }
 
       const url = existingBook
         ? `http://localhost:5001/api/books/${existingBook.id}`
@@ -192,18 +222,56 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Supplier</label>
-                <select
-                  name="supplier_id"
-                  value={book.supplier_id}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-black outline-none"
-                  required
-                >
-                  <option value="">Select Supplier</option>
-                  {(Array.isArray(suppliers) ? suppliers : []).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                {existingBook ? (
+                  <input
+                    type="text"
+                    value={supplierSearch || ""}
+                    disabled
+                    className="w-full border rounded-lg px-3 py-2 bg-gray-100 cursor-not-allowed"
+                  />
+                ) : (
+                  <div className="relative" ref={dropdownRef}>
+                    <input
+                      placeholder="Search supplier..."
+                      value={supplierSearch}
+                      onChange={(e) => {
+                        setSupplierSearch(e.target.value);
+                        setBook(prev => ({ ...prev, supplier_id: "" }));
+                        setShowDropdown(true);
+                      }}
+                      onFocus={() => setShowDropdown(true)}
+                      className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-black outline-none"
+                    />
+
+                    {showDropdown && supplierSearch && !book.supplier_id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute z-50 w-full bg-white border rounded-lg mt-1 max-h-40 overflow-y-auto shadow"
+                      >
+                        {filteredSuppliers.map(s => (
+                          <div
+                            key={s.id}
+                            onClick={() => {
+                              setBook(prev => ({ ...prev, supplier_id: s.id }));
+                              setSupplierSearch(s.name);
+                              setFilteredSuppliers([]);
+                              setShowDropdown(false);
+                            }}
+                            className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                          >
+                            {s.name}
+                          </div>
+                        ))}
+
+                        {filteredSuppliers.length === 0 && (
+                          <div className="px-3 py-2 text-gray-400 text-sm">
+                            No supplier found
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

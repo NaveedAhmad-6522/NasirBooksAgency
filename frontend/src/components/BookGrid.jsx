@@ -64,7 +64,7 @@ function BookGrid({ books = [], category, addToCart }) {
             {/* PRICE */}
             <div className="pr-6">
               <span className="text-sm font-semibold text-green-700 bg-green-50 px-3 py-1 rounded-lg whitespace-nowrap">
-                {Number(b.current_price).toLocaleString()}
+                Rs {Math.round(Number(b.current_price || 0)).toLocaleString()}
               </span>
             </div>
 
