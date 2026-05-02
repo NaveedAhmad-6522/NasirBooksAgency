@@ -9,6 +9,7 @@ import InvoicePage from "./components/Invoice.jsx"; // or wherever
 import Books from "./pages/Books.jsx";
 import Suppliers from "./pages/Suppliers.jsx";
 import SupplierLedgerPage from "./components/SupplierLedgerModal.jsx";
+import CustomerReturn from "./components/CustomerReturn.jsx";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/sales" element={<Sales />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerLedger />} /> {/* ✅ */}
+        <Route path="/customer-return/:id" element={<CustomerReturn />} />
         <Route path="/sales/:id" element={<InvoicePage />} />
         <Route path="/books" element={<Books />} />
         <Route path="/add-book" element={<Books />} />

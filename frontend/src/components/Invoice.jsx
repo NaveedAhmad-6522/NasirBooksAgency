@@ -17,6 +17,8 @@ document.head.appendChild(style);
 function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   const { id } = useParams();
   const [data, setData] = useState(null);
+  const [booksMap, setBooksMap] = useState({});
+  const [customerInfo, setCustomerInfo] = useState(null);
 
   useEffect(() => {
     if (mode === "pos") return; // skip API in POS
@@ -24,9 +26,35 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
 
     fetch(`http://localhost:5001/api/sales/${id}`)
       .then((res) => res.json())
-      .then(setData)
+      .then(res => {
+        console.log("SALE DATA:", res);
+        setData(res);
+      })
       .catch((err) => console.error(err));
   }, [id, mode]);
+
+  useEffect(() => {
+    if (!data?.sale?.customer_id) return;
+
+    fetch(`http://localhost:5001/api/customers/${data.sale.customer_id}`)
+      .then(res => res.json())
+      .then(setCustomerInfo)
+      .catch(() => {});
+  }, [data]);
+
+  useEffect(() => {
+    // fetch minimal books list once (or when id changes)
+    fetch(`http://localhost:5001/api/books?fields=id,title,publisher,edition`)
+      .then(res => res.json())
+      .then(list => {
+        const map = {};
+        (Array.isArray(list) ? list : list?.data || []).forEach(b => {
+          map[b.id] = b;
+        });
+        setBooksMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // 🔥 Prevent infinite loading when no id (like inside POS or accidental mount)
   if (!mode && !id) return null;
@@ -47,8 +75,10 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
       }
     : data?.sale || {};
 
+  const customerData = data?.customer || data?.sale?.customer || {};
+
   // 🔥 CALCULATIONS
-  const previousBalance = Number(customer?.balance || data?.previous_balance || 0);
+  const previousBalance = 0;
   let subtotal = 0;
   let totalDiscount = 0;
 
@@ -65,23 +95,41 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   });
 
   const netTotal = subtotal - totalDiscount;
-  const grandTotal = netTotal + previousBalance;
+  const grandTotal = netTotal;
 
   const paidAmount = Number(sale.paid_amount || 0);
-  const remaining = grandTotal - paidAmount;
+  const remaining = netTotal - paidAmount;
+
+  console.log("INVOICE CUSTOMER DEBUG:", { data, sale, customerData, customer });
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen flex justify-center print:bg-white print:p-0">
-      <div className="bg-white w-[800px] rounded-xl shadow-lg p-6 space-y-6 print:w-full print:shadow-none print:rounded-none print:p-2">
+    <div className="p-6 bg-gray-100 min-h-screen flex flex-col items-center print:bg-white print:p-0">
+      <div className="w-[800px] flex justify-end mb-3 print:hidden">
+        <button
+          onClick={() => window.print()}
+          className="bg-blue-600 text-white px-3 py-1.5 text-sm rounded-lg shadow hover:opacity-90 transition"
+        >
+          🖨 Print Invoice
+        </button>
+      </div>
+      <div className="w-[800px]">
+        <div className="bg-white w-full rounded-xl shadow-lg p-6 space-y-6 print:w-full print:shadow-none print:rounded-none print:p-2">
 
         {/* HEADER */}
         <div className="flex justify-between items-start border-b pb-5">
           <div>
-            <h1 className="text-3xl font-bold tracking-wide">NASIR BOOK AGENCY</h1>
+            <h1 className="text-3xl font-bold tracking-wide text-gray-900">NASIR BOOK AGENCY</h1>
             <div className="text-sm text-gray-500 mt-1">Sales Invoice</div>
-            <div className="text-xs text-gray-600 mt-2 leading-relaxed">
-              Dhakki Nalbandi, Peshawar<br/>
-              Phone: 0300-0000000
+            <div className="text-xs text-gray-600 mt-2 leading-relaxed space-y-1">
+              <div>Dhakki Nalbandi, Qissa Khwani Bazar Peshawar</div>
+              <div className="flex items-center gap-2">
+                <span>📞</span>
+                <span>091-2572277</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>💬</span>
+                <span>0302-8884377</span>
+              </div>
             </div>
           </div>
 
@@ -100,8 +148,32 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
           <div>
             <div className="font-semibold mb-1">Bill To</div>
             <div>{sale.customer_name || "Walk-in Customer"}</div>
-            <div>Phone: {customer?.phone || "-"}</div>
-            <div>City: {customer?.city || "-"}</div>
+            <div>
+              Phone: {
+                customerInfo?.phone ||
+                customerData?.phone ||
+                customerData?.phone_number ||
+                data?.phone ||
+                data?.customer_phone ||
+                sale?.phone ||
+                sale?.customer_phone ||
+                customer?.phone ||
+                "-"
+              }
+            </div>
+            <div>
+              City: {
+                customerInfo?.city ||
+                customerData?.city ||
+                customerData?.city_name ||
+                data?.city ||
+                data?.customer_city ||
+                sale?.city ||
+                sale?.customer_city ||
+                customer?.city ||
+                "-"
+              }
+            </div>
           </div>
 
           <div className="text-right">
@@ -112,16 +184,15 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         {/* ITEMS */}
         <div>
           <table className="w-full text-sm border-collapse mt-6">
-            <thead className="bg-gray-50 border-y">
+            <thead className="bg-gray-50 border-y text-xs uppercase">
               <tr>
-                <th className="py-3 text-left font-semibold">#</th>
-                <th className="py-3 text-left font-semibold">Item</th>
-                <th className="py-3 text-left font-semibold">Qty</th>
-                <th className="py-3 text-left font-semibold">Price</th>
-                <th className="py-3 text-left font-semibold">Total</th>
-                <th className="py-3 text-left font-semibold">%</th>
-                <th className="py-3 text-left font-semibold">Discount</th>
-                <th className="py-3 text-left font-semibold">Amount</th>
+                <th className="py-3 text-left">#</th>
+                <th className="py-3 text-left">Item</th>
+                <th className="py-3 text-center">Qty</th>
+                <th className="py-3 text-right">Unit Price</th>
+                <th className="py-3 text-right">Discount</th>
+                <th className="py-3 text-right">Disc Price</th>
+                <th className="py-3 text-right">Total</th>
               </tr>
             </thead>
 
@@ -131,20 +202,46 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
                 const qty = Number(i.quantity || 0);
                 const disc = parseFloat(i.discount || 0) || 0;
 
-                const total = price * qty;
-                const discountAmount = (total * disc) / 100;
-                const final = total - discountAmount;
+                const discounted = price * (1 - disc / 100);
+                const total = discounted * qty;
+
+                const meta = booksMap[i.book_id] || {};
+                const name = i.book_name || i.title || meta.title || `Book #${i.book_id}`;
+                const publisher = i.publisher || meta.publisher;
+                const edition = i.edition || meta.edition;
 
                 return (
-                  <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
+                  <tr key={idx} className="border-b last:border-0">
                     <td className="py-3">{idx + 1}</td>
-                    <td className="py-3">{i.title}</td>
-                    <td className="py-3 text-right">{qty}</td>
-                    <td className="py-3 text-right">Rs {price.toFixed(2)}</td>
-                    <td className="py-3 text-right">Rs {total.toFixed(2)}</td>
-                    <td className="py-3 text-right">{disc}%</td>
-                    <td className="py-3 text-right">Rs {discountAmount.toFixed(2)}</td>
-                    <td className="py-3 text-right font-medium">Rs {final.toFixed(2)}</td>
+
+                    <td className="py-3 font-medium">
+                      <div>{name}</div>
+                      {(publisher || edition) && (
+                        <div className="text-xs text-gray-500">
+                          {publisher ? publisher : ""}
+                          {publisher && edition ? " • " : ""}
+                          {edition ? `Edition: ${edition}` : ""}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="py-3 text-center">{qty}</td>
+
+                    <td className="py-3 text-right">
+                      Rs {price.toLocaleString()}
+                    </td>
+
+                    <td className="py-3 text-right">
+                      {disc}%
+                    </td>
+
+                    <td className="py-3 text-right text-gray-700">
+                      Rs {discounted.toLocaleString()}
+                    </td>
+
+                    <td className="py-3 text-right font-semibold">
+                      Rs {total.toLocaleString()}
+                    </td>
                   </tr>
                 );
               })}
@@ -156,45 +253,37 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         <div className="flex justify-end">
           <table className="w-[320px] text-sm mt-4">
             <tbody>
-              {previousBalance > 0 && (
-                <tr>
-                  <td className="py-1 text-gray-500">Previous Dues</td>
-                  <td className="py-1 text-right">Rs {previousBalance.toFixed(2)}</td>
-                </tr>
-              )}
 
               <tr>
                 <td className="py-1 text-gray-500">Subtotal</td>
-                <td className="py-1 text-right">Rs {subtotal.toFixed(2)}</td>
+                <td className="py-1 text-right">Rs {subtotal.toLocaleString()}</td>
               </tr>
 
               <tr>
                 <td className="py-1 text-gray-500">Discount</td>
-                <td className="py-1 text-right">- Rs {totalDiscount.toFixed(2)}</td>
+                <td className="py-1 text-right">- Rs {totalDiscount.toLocaleString()}</td>
               </tr>
 
               <tr className="border-t">
                 <td className="py-2 font-semibold">Net Total</td>
-                <td className="py-2 text-right font-semibold">Rs {netTotal.toFixed(2)}</td>
+                <td className="py-2 text-right font-semibold">Rs {netTotal.toLocaleString()}</td>
               </tr>
 
-              {previousBalance > 0 && (
-                <tr>
-                  <td className="py-1 text-gray-500">Grand Total</td>
-                  <td className="py-1 text-right font-semibold">Rs {grandTotal.toFixed(2)}</td>
-                </tr>
-              )}
+              <tr>
+                <td className="py-1 text-gray-500">Grand Total</td>
+                <td className="py-1 text-right font-semibold">Rs {grandTotal.toLocaleString()}</td>
+              </tr> 
 
               <tr>
                 <td className="py-1 text-gray-500">Paid</td>
-                <td className="py-1 text-right">Rs {paidAmount.toFixed(2)}</td>
+                <td className="py-1 text-right">Rs {paidAmount.toLocaleString()}</td>
               </tr>
 
               {remaining > 0 && (
                 <tr className="border-t">
                   <td className="py-2 font-bold text-red-600">Remaining</td>
                   <td className="py-2 text-right font-bold text-red-600">
-                    Rs {remaining.toFixed(2)}
+                    Rs {remaining.toLocaleString()}
                   </td>
                 </tr>
               )}
@@ -203,11 +292,11 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center pt-6 border-t text-xs text-gray-500">
+        <div className="flex justify-between items-center pt-6 border-t text-xs text-gray-400">
           <div>Thank you for your business</div>
           <div>Nasir Book Agency</div>
         </div>
-
+        </div>
       </div>
     </div>
   );

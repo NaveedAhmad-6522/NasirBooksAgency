@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
 import { DollarSign, ShoppingCart, Users, Wallet, LayoutDashboard, Calendar } from "lucide-react";
 import Sidebar from "../components/Sidebar";
@@ -9,6 +9,10 @@ function Dashboard() {
 
   const [filter, setFilter] = useState("Last 7 Days");
   const [data, setData] = useState(null);
+  const [lowStockLimit] = useState(10);
+  const [lowStockOffset, setLowStockOffset] = useState(0);
+  const [lowStockData, setLowStockData] = useState([]);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef();
 
@@ -25,7 +29,10 @@ function Dashboard() {
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
 useEffect(() => {
-  fetch(`${API}/api/dashboard?filter=${filter}`)
+  setLowStockData([]);
+  setLowStockOffset(0);
+
+  fetch(`${API}/api/dashboard?filter=${filter}&lowStockLimit=10&lowStockOffset=0`)
     .then(async (res) => {
       if (!res.ok) {
         const text = await res.text();
@@ -33,7 +40,11 @@ useEffect(() => {
       }
       return res.json();
     })
-    .then(res => setData(res))
+    .then(res => {
+      setData(res);
+      setLowStockData(res.lowStock || []);
+      setLowStockOffset(10);
+    })
     .catch(err => {
       console.error("Dashboard API Error:", err);
     });
@@ -59,7 +70,7 @@ useEffect(() => {
     }).format(num);
 
   const salesData = data?.chart || [];
-  const normalizedData = salesData
+  const normalizedData = useMemo(() => salesData
     .map(d => {
       // If backend sends hour (Today case)
       if (typeof d.hour !== "undefined") {
@@ -86,8 +97,9 @@ useEffect(() => {
         receivable: Number(d.receivable || d.total || 0),
       };
     })
-    .sort((a, b) => (a.rawDate > b.rawDate ? 1 : -1));
+    .sort((a, b) => (a.rawDate > b.rawDate ? 1 : -1)), [salesData]);
   const hasData = normalizedData.length > 0;
+  const chartData = filter === "Today" ? normalizedData.slice(-24) : normalizedData.slice(-7);
   // Find peak value (highest sales point)
 const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
   const getChange = (arr, key) => {
@@ -115,21 +127,57 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
     return ((current - previous) / previous) * 100;
   };
 
-  const salesChange = getChange(normalizedData, "total");
-  const ordersChange = getChange(normalizedData, "orders");
-  const customersChange = getChange(normalizedData, "customers");
+  const salesChange = getChange(chartData, "total");
+  const ordersChange = getChange(chartData, "orders");
+  const customersChange = getChange(chartData, "customers");
+  const visibleLowStock = lowStockData;
+  const handleLowStockScroll = async (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+  
+    if (
+      scrollTop + clientHeight >= scrollHeight - 5 &&
+      !loadingMore &&
+      data
+    ) {
+      if (lowStockData.length >= (data?.lowStockTotal || 0)) return;
+  
+      console.log("Fetching more...", lowStockOffset);
+  
+      setLoadingMore(true);
+  
+      try {
+        const res = await fetch(
+          `${API}/api/dashboard?filter=${filter}&lowStockLimit=10&lowStockOffset=${lowStockOffset}`
+        );
+  
+        const newData = await res.json();
+  
+        if (!newData.lowStock || newData.lowStock.length === 0) {
+          setLoadingMore(false);
+          return;
+        }
+  
+        setLowStockData(prev => [...prev, ...newData.lowStock]);
+        setLowStockOffset(prev => prev + 10);
+      } catch (err) {
+        console.error(err);
+      }
+  
+      setLoadingMore(false);
+    }
+  };
 
   return (
   <div className="flex">
     <Sidebar />
 
     <div className="flex-1 min-h-screen bg-gray-50 flex flex-col">
-      <div className="p-6 space-y-6 flex-1">
+      <div className="p-4 space-y-4 flex-1">
 
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-xl font-semibold flex items-center gap-2">
             <LayoutDashboard className="text-gray-700" />
             Dashboard
           </h1>
@@ -189,53 +237,27 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       </div>
 
       {/* TOP CARDS */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3">
 
-        {/* SALES */}
-        <div className="bg-white p-5 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 flex items-center justify-center rounded-full bg-green-500 text-white">
-                <DollarSign size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Sales ({filter})</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(data?.sales?.totalSales || 0)}</p>
-              </div>
+        {/* SALES (CONFIDENTIAL) */}
+        <div className="bg-white p-4 rounded-xl shadow flex flex-col gap-3 opacity-70">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-500 text-white">
+              <DollarSign size={20} />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Sales</p>
+              <p className="text-2xl font-bold text-green-600">Rs ****</p>
             </div>
           </div>
-
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span className={salesChange >= 0 ? "text-green-500" : "text-red-500"}>
-              {salesChange >= 0 ? "▲" : "▼"} {Math.abs(salesChange).toFixed(1)}% {filter === "Today" ? "vs Previous Hour" : "vs Avg Previous"}
-            </span>
-            <div className="w-24 h-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filter === "Today" ? normalizedData : normalizedData.slice(-7)}>
-                  <defs>
-                    <linearGradient id="miniSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#16a34a"
-                    fill="url(#miniSales)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <p className="text-xs text-gray-400">Confidential</p>
         </div>
 
         {/* ORDERS */}
-        <div className="bg-white p-5 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
+        <div className="bg-white p-4 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 flex items-center justify-center rounded-full bg-blue-500 text-white">
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white">
                 <ShoppingCart size={20} />
               </div>
               <div>
@@ -249,9 +271,9 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
             <span className={ordersChange >= 0 ? "text-green-500" : "text-red-500"}>
               {ordersChange >= 0 ? "▲" : "▼"} {Math.abs(ordersChange).toFixed(1)}% {filter === "Today" ? "vs Previous Hour" : "vs Avg Previous"}
             </span>
-            <div className="w-24 h-10">
+            <div className="w-20 h-8">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filter === "Today" ? normalizedData : normalizedData.slice(-7)}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="miniOrders" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
@@ -272,10 +294,10 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
         </div>
 
         {/* CUSTOMERS */}
-        <div className="bg-white p-5 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
+        <div className="bg-white p-4 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 flex items-center justify-center rounded-full bg-purple-500 text-white">
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-500 text-white">
                 <Users size={20} />
               </div>
               <div>
@@ -289,9 +311,9 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
             <span className={customersChange >= 0 ? "text-green-500" : "text-red-500"}>
               {customersChange >= 0 ? "▲" : "▼"} {Math.abs(customersChange).toFixed(1)}% {filter === "Today" ? "vs Previous Hour" : "vs Avg Previous"}
             </span>
-            <div className="w-24 h-10">
+            <div className="w-20 h-8">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filter === "Today" ? normalizedData : normalizedData.slice(-7)}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="miniCustomers" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.3}/>
@@ -311,42 +333,18 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
           </div>
         </div>
 
-        {/* RECEIVABLE */}
-        <div className="bg-white p-5 rounded-xl shadow flex flex-col gap-3 hover:shadow-md transition">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 flex items-center justify-center rounded-full bg-orange-500 text-white">
-                <Wallet size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Receivable</p>
-                <p className="text-2xl font-bold text-orange-600">{formatCurrency(data?.receivable?.receivable || 0)}</p>
-              </div>
+        {/* RECEIVABLE (CONFIDENTIAL) */}
+        <div className="bg-white p-4 rounded-xl shadow flex flex-col gap-3 opacity-70">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-orange-500 text-white">
+              <Wallet size={20} />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Receivable</p>
+              <p className="text-2xl font-bold text-orange-600">Rs ****</p>
             </div>
           </div>
-
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span>From {data?.sales?.totalOrders || 0} Sales</span>
-            <div className="w-24 h-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filter === "Today" ? normalizedData : normalizedData.slice(-7)}>
-                  <defs>
-                    <linearGradient id="miniReceivable" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="receivable"
-                    stroke="#f97316"
-                    fill="url(#miniReceivable)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <p className="text-xs text-gray-400">Confidential</p>
         </div>
 
       </div>
@@ -355,14 +353,14 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       
 
       {/* SALES CHART PLACEHOLDER */}
-      <div className="bg-white p-6 rounded-xl shadow">
-        <h2 className="font-semibold mb-4">
+      <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition">
+        <h2 className="font-semibold text-gray-800 mb-4">
           {filter === "Today" ? "Sales (Today - Hourly)" : `Sales (${filter})`}
         </h2>
-        <div className="w-full h-[260px] overflow-hidden">
+        <div className="w-full h-[200px] overflow-hidden">
           {hasData ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={filter === "Today" ? normalizedData : normalizedData.slice(-7)}>
+              <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
@@ -399,17 +397,20 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       </div>
 
       {/* BOTTOM TABLES */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
 
         {/* TOP BOOKS */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
+        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition">
+          <h2 className="font-semibold text-gray-800 mb-4 flex items-center justify-between">
             📚 Top Selling Books
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md">Scroll</span>
           </h2>
-          <div className="overflow-x-auto">
+          <div 
+            className="overflow-x-auto max-h-[220px] overflow-y-auto rounded-xl border border-gray-200 shadow-sm bg-white/80 backdrop-blur"
+          >
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500">
+            <thead className="sticky top-0 bg-gray-50 z-10 text-gray-600 text-xs uppercase tracking-wide">
+              <tr className="text-left text-gray-500 text-xs uppercase tracking-wide">
                 <th>#</th>
                 <th>Title</th>
                 <th>Publisher</th>
@@ -417,8 +418,8 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
               </tr>
             </thead>
             <tbody>
-              {Array.isArray(data?.topBooks) && data.topBooks.map((b, i) => (
-                <tr key={i} className="border-t">
+              {Array.isArray(data?.topBooks) && data.topBooks.slice(0, 10).map((b, i) => (
+                <tr key={i} className="border-b hover:bg-gray-50/70 transition-all duration-200">
                   <td>{i + 1}</td>
                   <td>{b.title}</td>
                   <td className="text-gray-500 text-xs">{b.publisher || "-"}</td>
@@ -427,7 +428,7 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
               ))}
               {(!data?.topBooks || data.topBooks.length === 0) && (
                 <tr>
-                  <td colSpan="4" className="text-center text-gray-400 py-4">No data available</td>
+                  <td colSpan="4" className="text-center text-gray-400 py-4">No data available 📭</td>
                 </tr>
               )}
             </tbody>
@@ -437,14 +438,26 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
         </div>
 
         {/* LOW STOCK */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
-            ⚠️ Low Stock (Below 10)
+        <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition">
+          <h2 className="font-semibold text-gray-800 mb-4 flex items-center justify-between">
+            ⚠️ Low Stock (Below 15)
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md">Scroll</span>
           </h2>
-          <div className="overflow-x-auto">
+          <div className="flex gap-4 mb-4">
+            <div className="bg-red-100 text-red-700 px-3 py-2 rounded-lg text-xs font-semibold">
+              Critical: {data?.lowStock?.filter(b => b.stock <= 5).length || 0}
+            </div>
+            <div className="bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-xs font-semibold">
+              Low: {data?.lowStock?.filter(b => b.stock > 5 && b.stock <= 15).length || 0}
+            </div>
+          </div>
+          <div
+  className="overflow-x-auto max-h-[220px] overflow-y-auto rounded-xl border border-gray-200 shadow-sm bg-white/80 backdrop-blur"
+  onScroll={handleLowStockScroll}
+>
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500">
+            <thead className="sticky top-0 bg-gray-50 z-10 text-gray-600 text-xs uppercase tracking-wide">
+              <tr className="text-left text-gray-500 text-xs uppercase tracking-wide">
                 <th>#</th>
                 <th>Title</th>
                 <th>Publisher</th>
@@ -452,25 +465,37 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
               </tr>
             </thead>
             <tbody>
-              {Array.isArray(data?.lowStock) && data.lowStock.map((b, i) => (
-                <tr key={i} className="border-t">
+              {Array.isArray(visibleLowStock) && visibleLowStock.map((b, i) => (
+                <tr key={i} className="border-b hover:bg-gray-50/70 transition-all duration-200">
                   <td>{i + 1}</td>
                   <td>{b.title}</td>
                   <td className="text-gray-500 text-xs">{b.publisher || "-"}</td>
-                  <td className={b.stock <= 0 ? "text-red-600 font-bold" : "text-orange-500 font-medium"}>
-                    {b.stock}
+                  <td>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      b.stock <= 5
+                        ? "bg-red-50 text-red-600 border border-red-200"
+                        : "bg-orange-50 text-orange-600 border border-orange-200"
+                    }`}>
+                      {b.stock}
+                    </span>
                   </td>
                 </tr>
               ))}
+              {loadingMore && (
+                <tr>
+                  <td colSpan="4" className="text-center text-gray-400 py-2 text-xs">
+                    Loading more books...
+                  </td>
+                </tr>
+              )}
               {(!data?.lowStock || data.lowStock.length === 0) && (
                 <tr>
-                  <td colSpan="4" className="text-center text-gray-400 py-4">No low stock items</td>
+                  <td colSpan="4" className="text-center text-gray-400 py-4">No data available 📭</td>
                 </tr>
               )}
             </tbody>
           </table>
           </div>
-          
         </div>
 
       </div>

@@ -5,7 +5,10 @@ import {
   getCustomerLedger,
   getCustomerStats,
   addPayment,
-  exportCustomers   // ✅ include here ONCE
+  exportCustomers,
+  getCustomerSales,
+  addCustomerReturn,
+  getCustomerById
 } from "../controllers/customersController.js";
 
 const router = express.Router();
@@ -26,6 +29,16 @@ router.get("/:id/ledger", getCustomerLedger);
 router.get("/stats", getCustomerStats);
 //export
 router.get("/export", exportCustomers);
+
+/* =========================
+   📚 CUSTOMER SALES (FOR RETURN)
+========================= */
+router.get("/:id/sales", getCustomerSales);
+router.get("/:id", getCustomerById);
+/* =========================
+   🔁 CUSTOMER RETURN
+========================= */
+router.post("/return", addCustomerReturn);
 export default router;
 
 

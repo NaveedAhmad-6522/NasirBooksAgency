@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   X,
   User,
@@ -196,26 +196,57 @@ const handlePrint = (customer, totals) => {
 
 function CustomerLedgerPage({ onViewSale }) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = React.useState(null);
-
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState(null);
+  const [page, setPage] = React.useState(1);
+  const [limit] = React.useState(50);
 
-  React.useEffect(() => {
+  // Fetch ledger utility for refresh
+  const fetchLedger = () => {
     if (!id) return;
-    fetch(`http://localhost:5001/api/customers/${id}/ledger`)
+    fetch(`http://localhost:5001/api/customers/${id}/ledger?page=${page}&limit=${limit}`)
       .then(res => res.json())
       .then(setData)
       .catch(err => console.error("Ledger fetch error:", err));
-  }, [id]);
-
-  const [localLedger, setLocalLedger] = React.useState([]);
+  };
 
   React.useEffect(() => {
-    if (data?.ledger) {
-      setLocalLedger(data.ledger);
-    }
-  }, [data]);
+    fetchLedger();
+  }, [id, page]);
+
+  // Smart scalable polling (auto-refresh)
+  React.useEffect(() => {
+    let timeout;
+
+    const smartRefresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchLedger();
+      }
+
+      timeout = setTimeout(smartRefresh, 20000); // lighter, scalable
+    };
+
+    smartRefresh();
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [id, page]);
+
+  React.useEffect(() => {
+    const onFocus = () => {
+      fetchLedger();
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [id, page]);
+
 
   if (!data) {
     return <div className="p-6">Loading ledger...</div>;
@@ -225,20 +256,11 @@ function CustomerLedgerPage({ onViewSale }) {
   const ledger = data?.ledger || [];
 
   // 🔥 SHOW LATEST FIRST (DO NOT MUTATE ORIGINAL)
-  const displayLedger = Array.isArray(localLedger) ? [...localLedger].reverse() : [];
+  const displayLedger = data?.ledger || [];
 
-  const totalDebit = localLedger
-    .filter((l) => l.type === "sale" || l.type === "opening")
-    .reduce((sum, l) => {
-      if (l.type === "opening") return sum + Number(l.balance || 0);
-      return sum + Number(l.amount);
-    }, 0);
-
-  const totalCredit = localLedger
-    .filter((l) => l.type === "payment")
-    .reduce((sum, l) => sum + Number(l.amount), 0);
-
-  const net = totalDebit - totalCredit;
+  const totalDebit = data?.totals?.debit || 0;
+  const totalCredit = data?.totals?.credit || 0;
+  const net = data?.totals?.net || 0;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -265,7 +287,24 @@ function CustomerLedgerPage({ onViewSale }) {
               Detailed statement of account
             </p>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setSelectedPayment(null);
+                setShowPaymentModal(true);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              + Payment
+            </button>
 
+            <button
+              onClick={() => window.open(`/customer-return/${id}`, '_blank')}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+            >
+              Return
+            </button>
+          </div>
         </div>
 
         {/* CUSTOMER */}
@@ -367,13 +406,23 @@ function CustomerLedgerPage({ onViewSale }) {
 
                     const isSale = l.type === "sale";
                     const isPayment = l.type === "payment";
+                    const isReturn = l.type === "return";
                     const isOpening = l.type === "opening";
-                    const refLabel = isOpening ? "OPENING" : `INV-${String(l.id).padStart(4, "0")}`;
+                    const refLabel = isOpening
+                      ? "OPENING"
+                      : isReturn
+                      ? `RINV-${String(l.id).padStart(4, "0")}`
+                      : `INV-${String(l.id).padStart(4, "0")}`;
 
                     return (
                       <tr
                         key={i}
-                        className={`border-b transition ${isSale || isPayment ? "hover:bg-gray-50" : ""}`}
+                        className={`border-b transition ${
+                          isSale ? "bg-red-50 hover:bg-red-100" :
+                          isPayment ? "bg-green-50 hover:bg-green-100" :
+                          isReturn ? "bg-orange-50 hover:bg-orange-100" :
+                          "hover:bg-gray-50"
+                        }`}
                       >
                         <td className="p-3 text-gray-600">
                           {isOpening ? "-" : new Date(l.created_at).toLocaleDateString()}
@@ -384,6 +433,8 @@ function CustomerLedgerPage({ onViewSale }) {
                               ? "text-blue-600 cursor-pointer hover:underline"
                               : isPayment
                               ? "text-indigo-600 cursor-pointer hover:underline"
+                              : isReturn
+                              ? "text-green-700 cursor-pointer hover:underline"
                               : "text-gray-800"
                           }`}
                           onClick={() => {
@@ -391,31 +442,150 @@ function CustomerLedgerPage({ onViewSale }) {
                               window.open(`/sales/${l.id}`, "_blank");
                             } else if (isPayment) {
                               setSelectedPayment(l);
-                              setShowPaymentModal(true);
+                            } else if (isReturn) {
+                              const win = window.open("", "", "width=800,height=600");
+
+                              // parse items BEFORE rendering
+                              let parsedItems = [];
+                              try {
+                                if (typeof l.items === "string") {
+                                  parsedItems = JSON.parse(l.items || "[]");
+                                } else if (Array.isArray(l.items)) {
+                                  parsedItems = l.items;
+                                }
+                              } catch (e) {
+                                console.error("Items parse error:", e, l.items);
+                              }
+
+                              // build rows
+                              const rowsHtml = parsedItems.length
+                                ? parsedItems
+                                    .map((it) => {
+                                      const bookName =
+                                        it.book_name ||
+                                        it.name ||
+                                        it.title ||
+                                        it.bookTitle ||
+                                        (it.book_id ? `Book #${it.book_id}` : "-");
+                                      return `
+                                        <tr>
+                                          <td>${bookName}</td>
+                                          <td class="center">${it.quantity}</td>
+                                          <td class="right">Rs ${Number(it.original_price || it.price).toLocaleString()}</td>
+                                          <td class="center">${it.discount || 0}%</td>
+                                          <td class="right">Rs ${Number(it.price).toLocaleString()}</td>
+                                          <td class="right">Rs ${Number(it.quantity * it.price).toLocaleString()}</td>
+                                        </tr>
+                                      `;
+                                    })
+                                    .join("")
+                                : `
+                                  <tr>
+                                    <td colspan="6" class="center" style="color:#999;">
+                                      No item details available
+                                    </td>
+                                  </tr>
+                                `;
+
+                              win.document.write(`
+                                <html>
+                                  <head>
+                                    <title>Return Invoice</title>
+                                    <style>
+                                      body { font-family: Arial, sans-serif; padding: 20px; color:#111; }
+                                      h1 { margin-bottom: 4px; }
+                                      .sub { color:#555; font-size:13px; margin-bottom:10px; }
+                                      .box { margin-top: 15px; line-height:1.6; }
+                                      table { width:100%; border-collapse: collapse; margin-top:15px; }
+                                      th { background:#111; color:#fff; padding:8px; font-size:12px; }
+                                      td { padding:8px; border-bottom:1px solid #ddd; font-size:13px; }
+                                      .right { text-align:right; }
+                                      .center { text-align:center; }
+                                      .total { margin-top:20px; font-size:18px; font-weight:bold; color:#16a34a; text-align:right; }
+                                    </style>
+                                  </head>
+                                  <body>
+
+                                    <h1>NASIR BOOK AGENCY</h1>
+                                    <div class="sub">Return Invoice</div>
+
+                                    <div class="box">
+                                      <div class="row"><strong>Customer:</strong> ${customer.name || "-"}</div>
+                                      <div class="row"><strong>Phone:</strong> ${customer.phone && customer.phone !== "__" ? customer.phone : "-"}</div>
+                                      <div class="row"><strong>City:</strong> ${customer.city && customer.city !== "__" ? customer.city : "-"}</div>
+                                      <div class="row"><strong>Date:</strong> ${new Date(l.created_at).toLocaleString()}</div>
+                                      <div class="row"><strong>Invoice #:</strong> RINV-${String(l.id).padStart(4, "0")}</div>
+                                    </div>
+
+                                    <div class="box">
+                                      <div class="row"><strong>Type:</strong> Book Return</div>
+                                    </div>
+
+                                    <table border="1" cellspacing="0" cellpadding="8">
+                                      <thead>
+                                        <tr>
+                                          <th>Book</th>
+                                          <th>Qty</th>
+                                          <th>Original</th>
+                                          <th>Disc</th>
+                                          <th>Price</th>
+                                          <th>Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        ${rowsHtml}
+                                      </tbody>
+                                    </table>
+
+                                    <div class="total">
+                                      Total Refund: Rs ${Number(l.amount).toLocaleString()}
+                                    </div>
+
+                                  </body>
+                                </html>
+                              `);
+
+                              win.document.close();
+                              // Add manual print button instead of auto-print
+                              const printBtn = win.document.createElement('button');
+                              printBtn.innerText = 'Print Invoice';
+                              printBtn.style.marginTop = '20px';
+                              printBtn.style.padding = '10px 20px';
+                              printBtn.style.background = '#111827';
+                              printBtn.style.color = '#fff';
+                              printBtn.style.border = 'none';
+                              printBtn.style.cursor = 'pointer';
+                              printBtn.onclick = () => win.print();
+
+                              win.document.body.appendChild(printBtn);
                             }
                           }}
                         >
                           {refLabel}
                         </td>
-                        <td className="p-3 text-gray-600 font-medium">
-                          {isOpening ? "Opening" : isSale ? "Sale" : "Payment"}
+                        <td className="p-3">
+                          {isOpening && <span className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-700">Opening</span>}
+                          {isSale && <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-700">Sale</span>}
+                          {isPayment && <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-700">Payment</span>}
+                          {isReturn && <span className="px-2 py-1 text-xs rounded bg-orange-100 text-orange-700">Return</span>}
                         </td>
                         <td className="p-3 text-gray-600">
                           {isOpening && "Opening Balance"}
-                          {isSale && `Invoice #${l.id} `}
+                          {isSale && `Invoice #${l.id}`}
+                          {isReturn && `Return Invoice #${l.id}`}
                           {isPayment && "Payment Received"}
                         </td>
                         <td
                           className="p-3 text-right font-semibold"
-                          style={{color: isSale ? "#dc2626" : "#999"}}
+                          style={{ color: isSale ? "#dc2626" : "#999" }}
                         >
                           {isSale ? `Rs ${Number(l.amount).toLocaleString()}` : "-"}
                         </td>
                         <td
                           className="p-3 text-right font-semibold"
-                          style={{color: isPayment ? "#16a34a" : "#999"}}
+                          style={{ color: isPayment || isReturn ? "#16a34a" : "#999" }}
                         >
-                          {isPayment ? `Rs ${Number(l.amount).toLocaleString()}` : "-"}
+                          {isPayment || isReturn ? `Rs ${Number(l.amount).toLocaleString()}` : "-"}
                         </td>
                         <td className="p-3 text-right font-bold text-gray-800">
                           Rs {Number(l.balance).toLocaleString()}
@@ -435,11 +605,9 @@ function CustomerLedgerPage({ onViewSale }) {
 
         {/* FOOTER */}
         <div className="flex gap-3 no-print">
-
           <div className="text-sm text-gray-400">
-            {localLedger.length} transactions
+            {data?.pagination?.total || 0} total transactions
           </div>
-
           <div className="flex gap-3">
             <button
               onClick={() =>
@@ -453,29 +621,87 @@ function CustomerLedgerPage({ onViewSale }) {
             >
               Print
             </button>
-
           </div>
-
         </div>
 
       </div>
 
-      {showPaymentModal && selectedPayment && (
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[350px] space-y-4 shadow-xl">
+
+            <h3 className="text-lg font-semibold">Add Payment</h3>
+
+            <div className="text-sm text-gray-500">
+              Customer: <strong>{customer.name}</strong>
+            </div>
+
+            <input
+              type="number"
+              placeholder="Enter amount"
+              className="w-full border p-2 rounded"
+              id="paymentAmount"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-3 py-1 border rounded"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={async () => {
+                  const amount = document.getElementById("paymentAmount").value;
+
+                  if (!amount) return alert("Enter amount");
+
+                  await fetch("http://localhost:5001/api/customers/payment", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      customer_id: id,
+                      amount: Number(amount),
+                      payment_method: "cash"
+                    })
+                  });
+
+                  setShowPaymentModal(false);
+                  fetchLedger();
+                }}
+                className="px-3 py-1 bg-blue-600 text-white rounded"
+              >
+                Save
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {selectedPayment && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-[350px] space-y-4 shadow-xl">
 
             <h3 className="text-lg font-semibold">Payment Details</h3>
 
-            <div className="text-sm text-gray-600">
-              <div><strong>Reference:</strong> PAY-{String(selectedPayment.id).padStart(4, "0")}</div>
-              <div><strong>Date:</strong> {new Date(selectedPayment.created_at).toLocaleString()}</div>
-              <div><strong>Amount:</strong> Rs {Number(selectedPayment.amount).toLocaleString()}</div>
+            <div className="text-sm text-gray-500">
+              Customer: <strong>{customer.name}</strong>
+            </div>
+
+            <div className="text-sm">
+              <strong>Amount:</strong> Rs {Number(selectedPayment.amount).toLocaleString()}
+            </div>
+
+            <div className="text-sm">
+              <strong>Date:</strong> {new Date(selectedPayment.created_at).toLocaleString()}
             </div>
 
             <div className="flex justify-end">
               <button
-                onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-gray-800 text-white rounded"
+                onClick={() => setSelectedPayment(null)}
+                className="px-3 py-1 border rounded"
               >
                 Close
               </button>

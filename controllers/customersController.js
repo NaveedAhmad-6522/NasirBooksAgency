@@ -136,126 +136,133 @@ export const createCustomer = (req, res) => {
 ========================= */
 export const getCustomerLedger = (req, res) => {
   const { id } = req.params;
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 50;
+  const offset = (page - 1) * limit;
 
-  // 🔹 GET CUSTOMER
   db.query(
     "SELECT name, phone, city, balance FROM customers WHERE id = ?",
     [id],
     (err, customerResult) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: "Customer fetch failed" });
-      }
-
-      if (!customerResult.length) {
-        return res.status(404).json({ error: "Customer not found" });
-      }
+      if (err) return res.status(500).json({ error: "Customer fetch failed" });
+      if (!customerResult.length) return res.status(404).json({ error: "Customer not found" });
 
       const customer = customerResult[0];
 
-      // 🔴 SALES (DEBIT)
-      const salesSql = `
-        SELECT 
-          id,
-          total_amount AS amount,
-          created_at,
-          'sale' AS type
-        FROM sales
-        WHERE customer_id = ?
-      `;
+      const ledgerSql = `
+  SELECT id, amount, created_at, type, items FROM (
 
-      // 🟢 PAYMENTS (FIXED)
-      const paymentsSql = `
-  -- 1. Manual payments
-  SELECT 
-    id,
-    amount,
-    created_at,
-    'payment' AS type
-  FROM payments
-  WHERE customer_id = ?
+    -- ✅ INDIVIDUAL SALES (no grouping)
+    SELECT 
+      id,
+      total_amount AS amount,
+      created_at,
+      'sale' AS type,
+      NULL AS items
+    FROM sales
+    WHERE customer_id = ?
 
-  UNION ALL
+    UNION ALL
 
-  -- 2. POS payments from sales table
-  SELECT 
-    id,
-    paid_amount AS amount,
-    created_at,
-    'payment' AS type
-  FROM sales
-  WHERE customer_id = ?
-  AND paid_amount > 0
+    SELECT id, amount, created_at, 'payment' AS type, NULL AS items
+    FROM payments WHERE customer_id = ?
+
+    UNION ALL
+
+    SELECT id, paid_amount AS amount, created_at, 'payment' AS type, NULL AS items
+    FROM sales WHERE customer_id = ? AND paid_amount > 0
+
+    UNION ALL
+
+    SELECT id, amount, created_at, 'return' AS type, items
+    FROM customer_returns WHERE customer_id = ?
+
+  ) AS ledger
+  ORDER BY created_at ASC, id ASC
+  LIMIT ? OFFSET ?
 `;
 
-      db.query(salesSql, [id], (err, sales) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ error: "Sales fetch failed" });
-        }
+      const totalsSql = `
+        SELECT 
+          SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) AS debit,
+          SUM(CASE WHEN type IN ('payment','return') THEN amount ELSE 0 END) AS credit
+        FROM (
+          SELECT total_amount AS amount, 'sale' AS type FROM sales WHERE customer_id = ?
+          UNION ALL
+          SELECT amount, 'payment' FROM payments WHERE customer_id = ?
+          UNION ALL
+          SELECT paid_amount, 'payment' FROM sales WHERE customer_id = ? AND paid_amount > 0
+          UNION ALL
+          SELECT amount, 'return' FROM customer_returns WHERE customer_id = ?
+        ) t
+      `;
 
-        // ✅ FIXED CALLBACK HERE
-        db.query(paymentsSql, [id, id], (err, payments) => {
-          if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Payments fetch failed" });
-          }
+      const countSql = `
+        SELECT COUNT(*) AS total FROM (
+          SELECT id FROM sales WHERE customer_id = ?
+          UNION ALL
+          SELECT id FROM payments WHERE customer_id = ?
+          UNION ALL
+          SELECT id FROM sales WHERE customer_id = ? AND paid_amount > 0
+          UNION ALL
+          SELECT id FROM customer_returns WHERE customer_id = ?
+        ) t
+      `;
 
-          // 🔥 MERGE
-          let ledger = [...sales, ...payments];
+      db.query(ledgerSql, [id, id, id, id, limit, offset], (err, ledger) => {
+        if (err) return res.status(500).json({ error: "Ledger fetch failed" });
 
-          // 🔥 SORT (OLD → NEW)
-          ledger.sort(
-            (a, b) =>
-              new Date(a.created_at) - new Date(b.created_at)
-          );
+        db.query(totalsSql, [id, id, id, id], (err2, totalsResult) => {
+          if (err2) return res.status(500).json({ error: "Totals fetch failed" });
 
-          // 🔥 TOTALS
-          let totalDebit = 0;
-          let totalCredit = 0;
+          db.query(countSql, [id, id, id, id], (err3, countResult) => {
+            if (err3) return res.status(500).json({ error: "Count fetch failed" });
 
-          ledger.forEach((entry) => {
-            if (entry.type === "sale") {
-              totalDebit += Number(entry.amount);
-            } else {
-              totalCredit += Number(entry.amount);
-            }
-          });
+            const totals = totalsResult[0] || {};
+            const totalRecords = countResult[0]?.total || 0;
 
-          // 🔥 OPENING BALANCE
-          const openingBalance =
-            Number(customer.balance) - (totalDebit - totalCredit);
+            // opening balance (derived)
+            const openingBalance = Number(customer.balance || 0) - (Number(totals.debit || 0) - Number(totals.credit || 0));
 
-          // 🔥 ADD OPENING ENTRY
-          ledger.unshift({
-            id: "OPENING",
-            amount: 0,
-            created_at: null,
-            type: "opening",
-            balance: openingBalance,
-          });
+            // we calculate from oldest → newest
+            let running = openingBalance;
 
-          // 🔥 RUNNING BALANCE
-          let balance = openingBalance;
+            // already in ASC order from DB
+            const calculated = ledger.map(e => {
+              const amt = Number(e.amount || 0);
+              if (e.type === 'sale') running += amt;
+              else running -= amt;
+              return { ...e, amount: amt, balance: Number(running) };
+            });
 
-          const fullLedger = ledger.map((entry) => {
-            if (entry.type === "sale") {
-              balance += Number(entry.amount);
-            } else if (entry.type === "payment") {
-              balance -= Number(entry.amount);
-            }
+            // then reverse back to DESC for UI
+            const fullLedger = [
+              ...calculated.reverse(),
+              {
+                id: 'OPENING',
+                amount: 0,
+                created_at: null,
+                type: 'opening',
+                balance: openingBalance
+              }
+            ];
 
-            return {
-              ...entry,
-              balance,
-            };
-          });
-
-          // ✅ NO PAGINATION (better for ledger + print)
-          res.json({
-            customer,
-            ledger: fullLedger,
-            final_balance: Number(customer.balance || 0),
+            res.json({
+              customer,
+              ledger: fullLedger,
+              totals: {
+                debit: Number(totals.debit || 0) + Number(openingBalance || 0),
+                credit: Number(totals.credit || 0),
+                net: (Number(totals.debit || 0) + Number(openingBalance || 0)) - Number(totals.credit || 0),
+              },
+              pagination: {
+                page,
+                limit,
+                total: totalRecords,
+                totalPages: Math.ceil(totalRecords / limit)
+              },
+              final_balance: Number(customer.balance || 0)
+            });
           });
         });
       });
@@ -409,4 +416,319 @@ export const exportCustomers = (req, res) => {
 res.setHeader("Content-Disposition", "attachment; filename=sales.csv");
     res.send(csv);
   });
+};
+/* =========================
+   📚 GET CUSTOMER PURCHASED BOOKS
+========================= */
+export const getCustomerSales = (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+  SELECT 
+    MIN(si.id) AS id,
+    si.book_id,
+    b.title AS book_name,
+    b.publisher,
+    b.edition AS edition,
+    SUM(si.quantity) AS quantity,
+    SUM(COALESCE(si.returned_quantity, 0)) AS returned_quantity,
+    (SUM(si.quantity) - SUM(COALESCE(si.returned_quantity, 0))) AS remaining_quantity,
+    COALESCE(AVG(si.price), 0) AS price,
+    MAX(s.created_at) AS created_at,
+    COALESCE(cbd.discount, 0) AS discount_percentage
+  FROM sale_items si
+  JOIN sales s ON s.id = si.sale_id
+  LEFT JOIN books b ON si.book_id = b.id
+  LEFT JOIN customer_discounts cbd 
+    ON cbd.book_id = si.book_id 
+    AND cbd.customer_id = s.customer_id
+  WHERE s.customer_id = ?
+  GROUP BY si.book_id
+  ORDER BY created_at DESC
+`;
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("Customer Sales Fetch Error:", err);
+      return res.status(500).json({ error: "Failed to fetch customer sales" });
+    }
+
+    res.json(result);
+  });
+};
+
+
+/* =========================
+   🔁 CUSTOMER RETURN (UPDATE STOCK + BALANCE)
+========================= */
+export const addCustomerReturn = (req, res) => {
+  const { customer_id, items } = req.body;
+
+  if (!customer_id || !items || !items.length) {
+    return res.status(400).json({ error: "Invalid data" });
+  }
+
+  // =======================================================
+  // 1) ADD accumulator BEFORE processItem
+  // =======================================================
+  let returnItems = [];
+  let totalReturnAmount = 0;
+
+  // Move handleRows above its first usage
+  const handleRows = (err, rows, quantity, index) => {
+    if (err || !rows.length) {
+      console.error(err);
+      return res.status(500).json({ error: "No sales found for this book" });
+    }
+
+    // 2️⃣ Calculate total available
+    let totalQty = 0;
+    let totalReturned = 0;
+
+    rows.forEach(r => {
+      totalQty += Number(r.quantity || 0);
+      totalReturned += Number(r.returned_quantity || 0);
+    });
+
+    const available = totalQty - totalReturned;
+
+    if (quantity > available) {
+      return res.status(400).json({
+        error: `Return exceeds available quantity. Available: ${available}`
+      });
+    }
+
+    let remainingToReturn = quantity;
+
+    // 3️⃣ Deduct from rows (FIFO)
+    const updateNext = (i) => {
+      if (i >= rows.length || remainingToReturn <= 0) {
+        // update stock + balance after distribution
+        const price = Number(rows[0].price || 0);
+        const discountPercent = Number(
+          rows[0].discount_percentage ?? rows[0].discount ?? 0
+        );
+
+        // apply discount
+        const discountedPrice = price - (price * discountPercent / 100);
+
+        const returnAmount = quantity * discountedPrice;
+
+        // update stock
+        db.query(
+          "UPDATE books SET stock = stock + ? WHERE id = ?",
+          [quantity, rows[0].book_id]
+        );
+
+        // update customer balance
+        db.query(
+          "UPDATE customers SET balance = balance - ? WHERE id = ?",
+          [returnAmount, customer_id]
+        );
+
+        // =======================================================
+        // 2) MODIFY handleRows → REMOVE DB insert logic
+        // =======================================================
+        const itemObj = {
+          book_id: rows[0].book_id,
+          book_name: rows[0].book_name || "",
+          publisher: rows[0].publisher || "",
+          edition: rows[0].edition || "",
+          quantity,
+          price: discountedPrice,
+          original_price: price,
+          discount: discountPercent
+        };
+
+        returnItems.push(itemObj);
+        totalReturnAmount += returnAmount;
+
+        return processItem(index + 1);
+      }
+
+      const row = rows[i];
+      const rowAvailable = Number(row.quantity) - Number(row.returned_quantity || 0);
+
+      if (rowAvailable <= 0) {
+        return updateNext(i + 1);
+      }
+
+      const take = Math.min(rowAvailable, remainingToReturn);
+
+      db.query(
+        `UPDATE sale_items 
+         SET returned_quantity = COALESCE(returned_quantity,0) + ? 
+         WHERE id = ?`,
+        [take, row.id],
+        (err) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Return update failed" });
+          }
+
+          remainingToReturn -= take;
+          updateNext(i + 1);
+        }
+      );
+    };
+
+    updateNext(0);
+  };
+
+  // =======================================================
+  // processItem
+  // =======================================================
+  const processItem = (index) => {
+    // =======================================================
+    // 3) FINALIZE INVOICE AFTER LOOP
+    // =======================================================
+    if (index >= items.length) {
+
+      // 🔥 CREATE / UPDATE SINGLE INVOICE HERE
+      db.query(
+        `SELECT id, items FROM customer_returns 
+         WHERE customer_id = ? 
+         AND DATE(CONVERT_TZ(created_at,'+00:00','+05:00')) = DATE(CONVERT_TZ(NOW(),'+00:00','+05:00'))`,
+        [customer_id],
+        (err, existing) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Return fetch failed" });
+          }
+
+          if (existing && existing.length) {
+            let existingItems = [];
+            if (existing[0].items) {
+              try {
+                if (typeof existing[0].items === "string") {
+                  existingItems = JSON.parse(existing[0].items);
+                } else if (typeof existing[0].items === "object") {
+                  existingItems = existing[0].items;
+                }
+              } catch (e) {
+                console.error("Items parse error:", e);
+                existingItems = [];
+              }
+            }
+
+            const mergedItems = [...existingItems, ...returnItems];
+
+            db.query(
+              `UPDATE customer_returns 
+               SET amount = amount + ?, items = ?
+               WHERE id = ?`,
+              [totalReturnAmount, JSON.stringify(mergedItems), existing[0].id]
+            );
+          } else {
+            // NOTE: (previous dues handled in frontend using customer.balance before update)
+            db.query(
+              `INSERT INTO customer_returns (customer_id, amount, items)
+               VALUES (?, ?, ?)`,
+              [customer_id, totalReturnAmount, JSON.stringify(returnItems)]
+            );
+          }
+
+          // return customer_id in response for fallback customer info fetch
+          return res.json({ 
+            message: "Return processed successfully",
+            customer_id
+          });
+        }
+      );
+      return;
+    }
+
+    const { book_id, sale_item_id, quantity } = items[index];
+
+    // 1️⃣ Fetch ALL sale items for this book or by sale_item_id
+    let sql;
+    let params;
+
+    if (book_id) {
+      sql = `
+        SELECT 
+  si.*,
+  b.title AS book_name,
+  b.publisher,
+  b.edition,
+  cbd.discount AS discount_percentage
+FROM sale_items si
+JOIN sales s ON s.id = si.sale_id
+LEFT JOIN books b ON b.id = si.book_id
+LEFT JOIN customer_discounts cbd
+  ON cbd.book_id = si.book_id
+  AND cbd.customer_id = s.customer_id
+WHERE s.customer_id = ?
+AND si.book_id = ?
+ORDER BY si.id ASC
+      `;
+      params = [customer_id, book_id];
+    } else if (sale_item_id) {
+      // 🔥 First get book_id from sale_item_id
+      return db.query(
+        `SELECT si.book_id 
+         FROM sale_items si 
+         JOIN sales s ON s.id = si.sale_id 
+         WHERE s.customer_id = ? AND si.id = ?`,
+        [customer_id, sale_item_id],
+        (err, result) => {
+          if (err || !result.length) {
+            return res.status(500).json({ error: "Sale item not found" });
+          }
+
+          const resolvedBookId = result[0].book_id;
+
+          // 🔥 Now fetch ALL rows for that book (IMPORTANT FIX)
+          const sql2 = `
+   SELECT 
+  si.*,
+  b.title AS book_name,
+  b.publisher,
+  b.edition,
+  cbd.discount AS discount_percentage
+FROM sale_items si
+JOIN sales s ON s.id = si.sale_id
+LEFT JOIN books b ON b.id = si.book_id
+LEFT JOIN customer_discounts cbd
+  ON cbd.book_id = si.book_id
+  AND cbd.customer_id = s.customer_id
+WHERE s.customer_id = ?
+AND si.book_id = ?
+ORDER BY si.id ASC
+          `;
+
+          db.query(sql2, [customer_id, resolvedBookId], (err, rows) => handleRows(err, rows, quantity, index));
+        }
+      );
+    }
+
+    if (book_id) {
+      db.query(sql, params, (err, rows) => handleRows(err, rows, quantity, index));
+    }
+  };
+
+  processItem(0);
+};
+/* =========================
+   👤 GET SINGLE CUSTOMER
+========================= */
+export const getCustomerById = (req, res) => {
+  const { id } = req.params;
+
+  db.query(
+    "SELECT id, name, phone, city, address, balance FROM customers WHERE id = ?",
+    [id],
+    (err, result) => {
+      if (err) {
+        console.error("Fetch Customer Error:", err);
+        return res.status(500).json({ error: "Failed to fetch customer" });
+      }
+
+      if (!result.length) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+
+      res.json(result[0]);
+    }
+  );
 };
