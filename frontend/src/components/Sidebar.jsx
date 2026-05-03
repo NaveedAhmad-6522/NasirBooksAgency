@@ -36,7 +36,7 @@ function Sidebar() {
       <div className="flex-1 p-4 space-y-2">
         <SidebarItem icon={<Home size={18} />} label="Dashboard" to="/Dashboard" />
 
-        <SidebarItem icon={<Home size={18} />} label="Billing (POS)" to="/pos" />
+        <SidebarItem icon={<Wallet size={18} />} label="Billing (POS)" to="/pos" />
 
         <SidebarItem icon={<BookOpen size={18} />} label="Books" to="/books" />
         <SidebarItem icon={<Package size={18} />} label="Stock" to="/stock" />
@@ -84,7 +84,7 @@ function Sidebar() {
 function SidebarItem({ icon, label, to }) {
   const location = useLocation();
 
-  const isActive = location.pathname === to;
+  const isActive = location.pathname === to || location.pathname.startsWith(to + "/");
   return (
     <Link to={to}>
       <div

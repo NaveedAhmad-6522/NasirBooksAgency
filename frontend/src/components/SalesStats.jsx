@@ -98,7 +98,7 @@ import {
   
         <StatCard
           title="Total Sales"
-          value={`Rs ${currentTotal}`}
+          value={`Rs ${currentTotal.toFixed(2)}`}
           change={getChange(currentTotal, previousTotal)}
           color="blue"
           filter={filter}
@@ -114,7 +114,7 @@ import {
   
         <StatCard
           title="Paid"
-          value={`Rs ${currentPaid}`}
+          value={`Rs ${currentPaid.toFixed(2)}`}
           change={getChange(currentPaid, previousPaid)}
           color="green"
           filter={filter}
@@ -122,7 +122,7 @@ import {
   
         <StatCard
           title="Remaining"
-          value={`Rs ${currentRemaining}`}
+          value={`Rs ${currentRemaining.toFixed(2)}`}
           change={getChange(currentRemaining, previousRemaining)}
           color="red"
           filter={filter}

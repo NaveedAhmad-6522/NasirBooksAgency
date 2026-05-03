@@ -81,9 +81,9 @@ function Sales() {
       ...filteredSales.map((s) => [
         s.id,
         s.customer_name || "Walk-in",
-        s.total_amount,
-        Number(s.received_amount ?? s.paid_amount ?? 0),
-        Number(s.remaining ?? 0),
+        Number(s.total_amount).toFixed(2),
+        Number(s.received_amount ?? s.paid_amount ?? 0).toFixed(2),
+        Number(s.remaining ?? 0).toFixed(2),
         s.customer_balance || 0,
         new Date(s.created_at).toLocaleString(),
       ]),
@@ -136,8 +136,9 @@ function Sales() {
             sales={filteredSales.map(s => ({
               ...s,
               customer_name: s.is_walkin === 1 ? null : s.customer_name,
-              paid_amount: Number(s.received_amount ?? s.paid_amount ?? 0),
-              remaining: Number(s.remaining ?? 0)
+              total_amount: Number(s.total_amount).toFixed(2),
+              paid_amount: Number(s.received_amount ?? s.paid_amount ?? 0).toFixed(2),
+              remaining: Number(s.remaining ?? 0).toFixed(2)
             }))}
             onView={handleView}
           />
@@ -167,9 +168,7 @@ function Sales() {
               <p><strong>Date:</strong> {new Date(selectedSale.sale.created_at).toLocaleString()}</p>
 
               {/* 🔥 BALANCE */}
-              <p className="text-orange-600">
-                <strong>Customer Balance:</strong> Rs {selectedSale.sale.customer_balance || 0}
-              </p>
+              
             </div>
 
             <div className="border rounded-lg overflow-hidden text-sm">
@@ -185,19 +184,19 @@ function Sales() {
                   <div>{item.title}</div>
                   <div>{item.quantity}</div>
                   <div>Rs {item.price}</div>
-                  <div>Rs {item.price * item.quantity}</div> 
+                  <div>Rs {(item.price * item.quantity).toFixed(2)}</div> 
                 </div>
               ))}
             </div>
 
             <div className="mt-4 text-sm space-y-1">
-              <p><strong>Total:</strong> Rs {selectedSale.sale.total_amount}</p>
+              <p><strong>Total:</strong> Rs {Number(selectedSale.sale.total_amount).toFixed(2)}</p>
               <p className="text-green-600">
-                <strong>Received:</strong> Rs {Number(selectedSale.sale.received_amount ?? selectedSale.sale.paid_amount ?? 0)}
+                <strong>Received:</strong> Rs {Number(selectedSale.sale.received_amount ?? selectedSale.sale.paid_amount ?? 0).toFixed(2)}
               </p>
               {Number(selectedSale.sale.remaining ?? 0) > 0 && (
                 <p className="text-gray-500">
-                  <strong>Remaining:</strong> Rs {Number(selectedSale.sale.remaining)}
+                  <strong>Remaining:</strong> Rs {Number(selectedSale.sale.remaining).toFixed(2)}
                 </p>
               )}
             </div>

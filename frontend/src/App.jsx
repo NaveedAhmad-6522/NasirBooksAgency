@@ -10,6 +10,7 @@ import Books from "./pages/Books.jsx";
 import Suppliers from "./pages/Suppliers.jsx";
 import SupplierLedgerPage from "./components/SupplierLedgerModal.jsx";
 import CustomerReturn from "./components/CustomerReturn.jsx";
+import ReportsPage from "./pages/ReportsPage.jsx";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         <Route path="/add-book" element={<Books />} />
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/suppliers/:id/ledger" element={<SupplierLedgerPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
       </Routes>
     </BrowserRouter>
   );

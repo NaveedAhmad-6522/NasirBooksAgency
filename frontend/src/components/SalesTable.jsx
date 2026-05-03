@@ -17,24 +17,22 @@ function SalesTable({ sales, onView }) {
       <div className="overflow-hidden">
 
         {/* HEADER */}
-        <div className="grid grid-cols-7 px-6 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b">
+        <div className="grid grid-cols-6 px-6 py-3 bg-gray-50 text-xs font-semibold text-gray-500 border-b">
           <div>ID</div>
           <div>Customer</div>
           <div>Total</div>
           <div>Paid</div>
-          <div>Remaining</div>
           <div>Date</div>
           <div className="text-right">Action</div>
         </div>
 
         {/* DATA */}
         {currentData.map((s) => {
-          const remaining = Number(s.remaining ?? 0);
 
           return (
             <div
               key={s.id}
-              className="grid grid-cols-7 items-center px-6 py-4 border-b text-sm hover:bg-gray-50 transition"
+              className="grid grid-cols-6 items-center px-6 py-4 border-b text-sm hover:bg-gray-50 transition"
             >
               <div className="font-medium text-gray-700">#{s.id}</div>
 
@@ -53,14 +51,6 @@ function SalesTable({ sales, onView }) {
 
               <div className="text-green-600 font-semibold">
                 Rs {s.paid_amount}
-              </div>
-
-              <div
-                className={`font-semibold ${
-                  remaining > 0 ? "text-red-500" : "text-gray-400"
-                }`}
-              >
-                {remaining > 0 ? `Rs ${remaining}` : "-"}
               </div>
 
               <div className="text-gray-500 text-xs">

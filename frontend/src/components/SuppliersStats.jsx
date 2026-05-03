@@ -7,6 +7,15 @@ export default function SuppliersStats({ suppliers, statsData }) {
       return `Rs. ${n}`;
     };
 
+    const formatNumber = (num) => {
+      const n = Number(num || 0);
+      if (n === 0) return "0";
+      if (n >= 10000000) return (n / 10000000).toFixed(1) + " Cr";
+      if (n >= 100000) return (n / 100000).toFixed(1) + " L";
+      if (n >= 1000) return (n / 1000).toFixed(1) + " K";
+      return n.toString();
+    };
+
     const totalSuppliers = statsData?.total_suppliers ?? 0;
   
     const totalBooks = statsData?.total_purchases ?? 0;
@@ -83,7 +92,23 @@ export default function SuppliersStats({ suppliers, statsData }) {
             <div className="flex flex-col">
               <span className="text-sm text-gray-500">{item.label}</span>
               <span className="text-xl font-semibold">
-                {item.value ?? "--"}
+                {item.label === "Total Purchases" ? (
+                  <span className="relative group cursor-default">
+                    {formatNumber(item.value)}
+                    <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded-md bg-gray-900 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none shadow-lg">
+                      {Number(item.value || 0).toLocaleString()}
+                    </span>
+                  </span>
+                ) : item.label === "Total Purchase Amount" ? (
+                  <span className="relative group cursor-default">
+                    {item.value}
+                    <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded-md bg-gray-900 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none shadow-lg">
+                      Rs. {Number(totalAmount || 0).toLocaleString()}
+                    </span>
+                  </span>
+                ) : (
+                  item.value ?? "--"
+                )}
               </span>
               <span className="text-xs text-gray-400">{item.sub}</span>
             </div>

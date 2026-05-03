@@ -5,6 +5,7 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString("en-GB");
 };
 
+
 const formatCurrency = (num) => {
   if (!num) return "Rs. 0";
   num = Number(num);
@@ -12,6 +13,16 @@ const formatCurrency = (num) => {
   if (num >= 100000) return `Rs. ${(num / 100000).toFixed(2)} L`;
   if (num >= 1000) return `Rs. ${(num / 1000).toFixed(2)} K`;
   return `Rs. ${num}`;
+};
+
+const formatNumber = (num) => {
+  num = Number(num || 0);
+
+  if (num === 0) return "0";
+  if (num >= 10000000) return (num / 10000000).toFixed(1) + " Cr";
+  if (num >= 100000) return (num / 100000).toFixed(1) + " L";
+  if (num >= 1000) return (num / 1000).toFixed(1) + " K";
+  return num.toString();
 };
 
 export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, onToggleStatus }) {
@@ -47,7 +58,11 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
             </tr>
           ) : (
             suppliers.map((s, index) => {
-              const hasTransactions = Number(s.totalAmount || 0) > 0 || Number(s.totalPayments || 0) > 0;
+              // 🚫 STRICT: once supplier has ANY history, never allow delete
+              const hasTransactions =
+                Number(s.totalAmount || 0) !== 0 ||
+                Number(s.totalReturns || 0) !== 0 ||
+                Number(s.totalPayments || 0) !== 0;
               const isActive = Number(s.is_active) === 1;
               return (
               <tr
@@ -71,7 +86,9 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
 
                 {/* BOOKS */}
                 <td className="px-4 py-4 text-right font-medium text-gray-700">
-                  {s.totalBooks}
+                  <span title={Number(s.totalBooks ?? s.total_books ?? 0).toLocaleString()}>
+                    {formatNumber(s.totalBooks ?? s.total_books ?? 0)}
+                  </span>
                 </td>
 
                 {/* PAYABLE */}
@@ -167,7 +184,7 @@ export default function SuppliersTable({ suppliers, onLedger, onEdit, onDelete, 
                       onClick={(e) => {
                         e.stopPropagation();
                         if (hasTransactions) {
-                          alert("Cannot delete supplier with transactions or payments");
+                          alert("Cannot delete supplier. This supplier has supply/return/payment history.");
                           return;
                         }
                         console.log("DELETE CLICKED:", s.id);

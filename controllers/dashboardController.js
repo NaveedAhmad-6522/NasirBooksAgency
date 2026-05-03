@@ -15,7 +15,7 @@ export const getDashboardData = async (req, res) => {
       } else if (filter === "Last 7 Days") {
         dateCondition = "created_at >= CURDATE() - INTERVAL 7 DAY";
       } else if (filter === "This Month") {
-        dateCondition = "MONTH(created_at) = MONTH(CURDATE())";
+        dateCondition = "created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')";
       }
   
       // CUSTOMERS
@@ -25,17 +25,17 @@ export const getDashboardData = async (req, res) => {
   
       // TOP BOOKS
       const topBooks = await promiseDb.query(`
-        SELECT b.title, b.publisher, SUM(si.quantity) as sold
+        SELECT b.title, b.publisher, b.edition, SUM(si.quantity) as sold
         FROM sale_items si
         JOIN books b ON si.book_id = b.id
-        GROUP BY si.book_id, b.title, b.publisher
+        GROUP BY si.book_id, b.title, b.publisher, b.edition
         ORDER BY sold DESC
         LIMIT 10
       `);
   
       // LOW STOCK
       const lowStock = await promiseDb.query(`
-        SELECT title, publisher, stock
+        SELECT title, publisher, edition, stock
         FROM books
         WHERE stock < 15
         ORDER BY stock ASC
@@ -44,6 +44,14 @@ export const getDashboardData = async (req, res) => {
 
       const lowStockCountResult = await promiseDb.query(`
         SELECT COUNT(*) as total FROM books WHERE stock < 15
+      `);
+
+      const criticalCountResult = await promiseDb.query(`
+        SELECT COUNT(*) as total FROM books WHERE stock <= 5
+      `);
+
+      const warningCountResult = await promiseDb.query(`
+        SELECT COUNT(*) as total FROM books WHERE stock > 5 AND stock < 15
       `);
   
       // SALES CHART
@@ -76,6 +84,8 @@ export const getDashboardData = async (req, res) => {
         topBooks,
         lowStock,
         lowStockTotal: lowStockCountResult[0].total,
+        criticalCount: criticalCountResult[0].total,
+        warningCount: warningCountResult[0].total,
         chart,
       });
   
@@ -83,3 +93,20 @@ export const getDashboardData = async (req, res) => {
       res.status(500).json({ error: err.message });
     }
   };
+export const getLowStock = async (req, res) => {
+  try {
+    const { limit = 10, offset = 0 } = req.query;
+
+    const data = await promiseDb.query(`
+      SELECT title, publisher, edition, stock
+      FROM books
+      WHERE stock < 15
+      ORDER BY stock ASC
+      LIMIT ${Number(limit)} OFFSET ${Number(offset)}
+    `);
+
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
