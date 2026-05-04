@@ -11,6 +11,7 @@ import Suppliers from "./pages/Suppliers.jsx";
 import SupplierLedgerPage from "./components/SupplierLedgerModal.jsx";
 import CustomerReturn from "./components/CustomerReturn.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
+import Settings from "./pages/setting.jsx";
 import DetailsPage from "./components/reports/DetailsPage.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 function App() {
@@ -33,6 +34,7 @@ function App() {
             <Route path="/suppliers/:id/ledger" element={<SupplierLedgerPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/reports/details" element={<DetailsPage />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </div>
       </div>
