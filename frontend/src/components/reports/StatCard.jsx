@@ -1,4 +1,4 @@
-export default function StatCard({ title, value, icon, type, subtitle }) {
+export default function StatCard({ title, value, icon, type, subtitle, onClick, tooltip }) {
   const colorMap = {
     blue: "bg-blue-100 text-blue-600",
     green: "bg-green-100 text-green-600",
@@ -18,9 +18,18 @@ export default function StatCard({ title, value, icon, type, subtitle }) {
           {/* Left Content */}
           <div>
             <p className="text-sm text-gray-500 mb-1">{title}</p>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {value}
-            </h2>
+            <div className="relative group inline-block">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {value}
+              </h2>
+
+              {/* Custom Tooltip */}
+              {tooltip && (
+                <div className="absolute z-50 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded-md shadow-lg whitespace-nowrap -top-7 left-1/2 -translate-x-1/2">
+                  {tooltip}
+                </div>
+              )}
+            </div>
 
             {subtitle && (
               <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
@@ -36,7 +45,10 @@ export default function StatCard({ title, value, icon, type, subtitle }) {
 
         {/* Bottom Section */}
         <div className="flex justify-end mt-2">
-          <span className="text-xs text-blue-600 font-medium cursor-pointer flex items-center gap-1">
+          <span
+            onClick={onClick}
+            className="text-xs text-blue-600 font-medium cursor-pointer flex items-center gap-1 hover:underline"
+          >
             View details
             <span>→</span>
           </span>

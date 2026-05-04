@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { saveCustomerDiscount } from "../services/discountApi";
 function Cart({
   cart,
@@ -12,6 +13,12 @@ function Cart({
   customer,
   className = ""
 }) {
+
+  const [tempPaid, setTempPaid] = useState(paid);
+
+  useEffect(() => {
+    setTempPaid(paid);
+  }, [paid]);
 
   const format = (num) =>
     Number(num || 0).toLocaleString("en-PK", {
@@ -46,7 +53,7 @@ function Cart({
     }
   };
   return (
-    <div className={`h-full overflow-y-auto bg-white rounded-xl shadow-sm ${className}`}>
+    <div className={`h-full overflow-y-auto bg-white rounded-xl shadow-sm print:overflow-visible print:h-auto print:break-inside-avoid print:shadow-none print:rounded-none print:m-0 print:p-0 ${className}`}>
 
       {/* HEADER */}
       <div className="sticky top-0 z-20 bg-white border-b">
@@ -96,7 +103,7 @@ function Cart({
         return (
           <div
             key={i.id}
-            className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.6fr] items-center px-5 py-2 border-b hover:bg-gray-50"
+            className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.6fr] items-center px-5 py-2 border-b hover:bg-gray-50 print:break-inside-avoid"
           >
 
             {/* BOOK */}
@@ -187,10 +194,11 @@ function Cart({
             <div className="text-center">
               <input
                 type="number"
-                value={i.discount}
-                onChange={(e) =>
-                  handleDiscountChange(i, e.target.value)
-                }
+                value={i.discount === 0 ? "" : i.discount}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleDiscountChange(i, val === "" ? "" : Number(val));
+                }}
                 onBlur={() =>
                   setCart(cart.map(c =>
                     c.id === i.id
@@ -227,7 +235,7 @@ function Cart({
       })}
 
       {/* SUMMARY */}
-      <div className="p-5 border-t bg-gradient-to-b from-white to-gray-50 space-y-4 rounded-b-xl">
+      <div className="p-5 border-t bg-gradient-to-b from-white to-gray-50 space-y-4 rounded-b-xl print:break-inside-avoid print:pb-0">
 
         <div className="flex justify-between text-[13px] text-gray-500">
           <span>Sub Total</span>
@@ -251,12 +259,21 @@ function Cart({
             <span className="text-[13px] text-gray-600">Amount Received</span>
             <input
               type="number"
-              value={paid}
-              onChange={(e) =>
-                setPaid(e.target.value === "" ? "" : Number(e.target.value))
-              }
+              value={tempPaid === 0 ? "" : tempPaid}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTempPaid(val === "" ? "" : Number(val));
+              }}
               onBlur={() => {
-                if (paid === "") setPaid(0);
+                const finalVal = tempPaid === "" ? 0 : Number(tempPaid);
+                setPaid(finalVal);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const finalVal = tempPaid === "" ? 0 : Number(tempPaid);
+                  setPaid(finalVal);
+                  e.currentTarget.blur();
+                }
               }}
               className="w-28 border rounded-lg px-3 py-2 text-right text-[14px] font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
             />
@@ -293,6 +310,8 @@ function Cart({
         </button>
 
       </div>
+
+      <div className="hidden print:block print:h-0"></div>
 
     </div>
   );

@@ -18,29 +18,63 @@ import {
   
     let chartData = [];
   
-    if (filter === "Today") {
+    let mode = "today"; // default
+
+    if (data.length && data[0]?.hour !== undefined) {
+      mode = "today";
+    } else if (data.length && typeof data[0]?.day === "string") {
+      mode = "week";
+    } else if (data.length && typeof data[0]?.day === "number") {
+      mode = "month";
+    } else {
+      // fallback to filter if detection fails
+      const f = (filter || "").toLowerCase();
+      if (f.includes("week")) mode = "week";
+      else if (f.includes("month")) mode = "month";
+      else mode = "today";
+    }
+  
+    if (data.length && data[0]?.hour !== undefined) {
       chartData = data.map(item => ({
         time: formatHour(item.hour),
         sales: Number(item.total || 0)
       }));
     }
   
-    else if (filter === "This Week") {
+    else if (data.length && typeof data[0]?.day === "string") {
       chartData = data.map(item => ({
         time: item.day,
         sales: Number(item.total || 0)
       }));
     }
   
-    else if (filter === "This Month") {
+    else if (data.length && typeof data[0]?.day === "number") {
       chartData = data.map(item => ({
         time: `Day ${item.day}`,
         sales: Number(item.total || 0)
       }));
     }
   
-    // 🔹 Fill missing values for smooth charts
-    if (filter === "Today") {
+    else {
+      if (mode === "today") {
+        chartData = data.map(item => ({
+          time: formatHour(item.hour),
+          sales: Number(item.total || 0)
+        }));
+      } else if (mode === "week") {
+        chartData = data.map(item => ({
+          time: item.day,
+          sales: Number(item.total || 0)
+        }));
+      } else if (mode === "month") {
+        chartData = data.map(item => ({
+          time: `Day ${item.day}`,
+          sales: Number(item.total || 0)
+        }));
+      }
+    }
+  
+    if (mode === "today") {
       const fullHours = Array.from({ length: 24 }, (_, i) => i);
       const map = new Map(chartData.map(d => [d.time, d.sales]));
   
@@ -53,7 +87,7 @@ import {
       });
     }
   
-    if (filter === "This Week") {
+    if (mode === "week") {
       const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
       const map = new Map(chartData.map(d => [d.time, d.sales]));
   
@@ -63,7 +97,7 @@ import {
       }));
     }
   
-    if (filter === "This Month") {
+    if (mode === "month") {
       const daysInMonth = 31; // safe default
       const map = new Map(chartData.map(d => [d.time, d.sales]));
   
@@ -76,14 +110,32 @@ import {
       });
     }
   
-    // 🔹 Ensure data is sorted correctly
-    if (filter === "Today") {
-      chartData.sort((a, b) => new Date(`1970-01-01 ${a.time}`) - new Date(`1970-01-01 ${b.time}`));
-    } else {
-      chartData.sort((a, b) => a.time.localeCompare(b.time));
+    if (mode === "today") {
+      chartData.sort((a, b) => {
+        const getHour = (label) => {
+          const [num, period] = label.split(" ");
+          let hour = Number(num);
+          if (period === "PM" && hour !== 12) hour += 12;
+          if (period === "AM" && hour === 12) hour = 0;
+          return hour;
+        };
+        return getHour(a.time) - getHour(b.time);
+      });
     }
   
-    // 🔹 Fallback when no data
+    if (mode === "week") {
+      const order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+      chartData.sort((a, b) => order.indexOf(a.time) - order.indexOf(b.time));
+    }
+  
+    if (mode === "month") {
+      chartData.sort((a, b) => {
+        const dayA = Number(a.time.replace("Day ", ""));
+        const dayB = Number(b.time.replace("Day ", ""));
+        return dayA - dayB;
+      });
+    }
+  
     if (!chartData.length) {
       chartData = [{ time: "No Data", sales: 0 }];
     }
@@ -102,9 +154,14 @@ import {
           {/* LIGHT GRID (like design) */}
           <CartesianGrid vertical={false} stroke="#eef2f7" />
   
-          {/* X AXIS (dynamic based on filter) */}
+          {/* X AXIS (dynamic based on mode) */}
           <XAxis
             dataKey="time"
+            tickFormatter={(value) => {
+              if (mode === "week") return value?.slice(0, 3);
+              if (mode === "month") return value?.replace("Day ", "");
+              return value;
+            }}
             tick={{ fontSize: 12, fill: "#9ca3af" }}
             axisLine={false}
             tickLine={false}

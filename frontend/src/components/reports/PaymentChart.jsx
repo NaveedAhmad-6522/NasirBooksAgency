@@ -6,10 +6,15 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const buildData = (data) => [
-  { name: "Received", value: Math.abs(Number(data.received || 0)) },
-  { name: "Paid", value: Math.abs(Number(data.paid || 0)) },
-];
+const buildData = (data) => {
+  const received = Number(data.received || 0);
+  const paid = Number(data.paid || 0);
+
+  return [
+    { name: "Received", value: received, abs: Math.abs(received) },
+    { name: "Paid", value: paid, abs: Math.abs(paid) },
+  ];
+};
 
 const COLORS = ["#22c55e", "#ef4444"];
 
@@ -22,7 +27,7 @@ const formatCurrency = (value) => {
 
 export default function PaymentChart({ data = { received: 0, paid: 0 } }) {
   const chartData = buildData(data);
-  const total = chartData.reduce((sum, d) => sum + d.value, 0);
+  const net = chartData.reduce((sum, d) => sum + d.value, 0);
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center">
@@ -31,7 +36,7 @@ export default function PaymentChart({ data = { received: 0, paid: 0 } }) {
           <PieChart>
             <Pie
               data={chartData}
-              dataKey="value"
+              dataKey="abs"
               nameKey="name"
               cx="50%"
               cy="50%"
@@ -53,11 +58,14 @@ export default function PaymentChart({ data = { received: 0, paid: 0 } }) {
               dominantBaseline="middle"
               className="fill-gray-900 text-sm font-semibold"
             >
-              {formatCurrency(total)}
+              {formatCurrency(Math.abs(net))}
             </text>
 
             <Tooltip
-              formatter={(value) => formatCurrency(value)}
+              formatter={(value, name, props) => {
+                const actual = props?.payload?.value || 0;
+                return formatCurrency(Math.abs(actual));
+              }}
               contentStyle={{
                 borderRadius: "10px",
                 border: "1px solid #e5e7eb",

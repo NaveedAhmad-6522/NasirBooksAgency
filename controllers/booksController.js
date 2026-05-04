@@ -26,7 +26,7 @@ export const addBook = (req, res) => {
   edition = edition || "";
   level = level && level.trim() !== "" ? level.trim() : null;
   printed_price = Number(printed_price) || 0;
-  current_price = Number(current_price) || 0;
+  current_price = Number(printed_price) || 0;
   purchase_price = Number(purchase_price) || 0;
   stock = Number(stock) || 0;
   barcode = barcode && barcode.trim() !== "" ? barcode : null;
@@ -183,7 +183,7 @@ export const getBooks = (req, res) => {
       IFNULL(b.edition, '') AS edition,
 
       CAST(b.printed_price AS DECIMAL(10,2)) AS printed_price,
-      CAST(b.current_price AS DECIMAL(10,2)) AS current_price,
+      CAST(COALESCE(b.current_price, b.printed_price, 0) AS DECIMAL(10,2)) AS current_price,
       CAST(IFNULL(b.purchase_price, 0) AS DECIMAL(10,2)) AS purchase_price,
       CAST(IFNULL(p.purchase_price, 0) AS DECIMAL(10,2)) AS last_purchase_price,
 
@@ -241,7 +241,7 @@ export const searchBooks = (req, res) => {
       IFNULL(edition, '') AS edition,
 
       CAST(printed_price AS DECIMAL(10,2)) AS printed_price,
-      CAST(current_price AS DECIMAL(10,2)) AS current_price,
+  CAST(COALESCE(current_price, printed_price, 0) AS DECIMAL(10,2)) AS current_price,
       CAST(IFNULL(purchase_price, 0) AS DECIMAL(10,2)) AS purchase_price,
 
       CAST(stock AS SIGNED) AS stock,

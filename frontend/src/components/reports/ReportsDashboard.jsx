@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import StatCard from "./StatCard";
 import SectionCard from "./SectionCard";
 import SalesChart from "./SalesChart";
@@ -7,11 +8,152 @@ import SummaryPanel from "./SummaryPanel";
 import { Package, ArrowDown, ArrowUp, Wallet, TrendingUp, AlertTriangle, BookOpen, Layers, CreditCard, Users } from "lucide-react";
 
 export default function ReportsDashboard({ onLogout }) {
+  const getPKDate = () => {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(now);
+  };
+
   const [filter, setFilter] = useState("Today");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(getPKDate());
 
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
+
+  const openDetailsPage = async (type) => {
+    try {
+      let endpoint = "";
+
+      if (type === "sales") endpoint = "sales-details";
+      if (type === "payments") endpoint = "payments-details";
+      if (type === "receivable") endpoint = "receivable-details";
+      if (type === "payable") endpoint = "payable-details";
+      if (type === "inventory") endpoint = "inventory-details";
+      if (type === "lowstock") endpoint = "lowstock-details";
+      if (type === "profit") endpoint = "profit-details";
+      if (type === "customerReturns") endpoint = "customer-returns-details";
+      if (type === "supplierReturns") endpoint = "supplier-returns-details";
+
+      if (!endpoint) {
+        alert("Invalid export type");
+        return;
+      }
+
+      const res = await fetch(`http://localhost:5001/api/reports/${endpoint}?filter=${filter}&date=${date}`);
+      const data = await res.json();
+
+      if (!data || data.length === 0) {
+        alert("No data to export");
+        return;
+      }
+
+      // Convert to CSV
+      let headers = Object.keys(data[0]);
+
+      // Custom headers for payable
+      if (type === "payable") {
+        headers = ["supplier", "balance"];
+      }
+      if (type === "inventory") {
+        headers = [
+          "title",
+          "publisher",
+          "category",
+          "edition",
+          "printed_price",
+          "purchase_price",
+          "current_price",
+          "stock",
+          "total_cost",
+          "total_retail",
+          "potential_profit"
+        ];
+      }
+      if (type === "profit") {
+        headers = [
+          "title",
+          "publisher",
+          "edition",
+          "purchase_price",
+          "selling_price",
+          "current_price",
+          "printed_price",
+          "total_sold",
+          "profit_per_unit",
+          "profit_percentage",
+          "total_profit"
+        ];
+      }
+
+      if (type === "lowstock") {
+        headers = [
+          "title",
+          "publisher",
+          "edition",
+          "stock"
+        ];
+      }
+      if (type === "customerReturns") {
+        headers = [
+          "return_id",
+          "customer",
+          "title",
+          "publisher",
+          "edition",
+          "quantity",
+          "purchase_price",
+          "printed_price",
+          "total_amount",
+          "return_date"
+        ];
+      }
+
+      if (type === "supplierReturns") {
+        headers = [
+          "id",
+          "title",
+          "publisher",
+          "edition",
+          "supplier",
+          "quantity",
+          "purchase_price",
+          "total_amount",
+          "return_date"
+        ];
+      }
+
+      const csvRows = [headers.join(",")];
+
+      data.forEach(row => {
+        const values = headers.map(h => `"${row[h] ?? ""}"`);
+        csvRows.push(values.join(","));
+      });
+
+      const csvContent = csvRows.join("\n");
+
+      // Download file
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${type}_details_${date}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (err) {
+      console.error(err);
+      alert("Export failed");
+    }
+  };
 
   const formatCurrency = (num) => {
     if (!num) return "0";
@@ -106,7 +248,18 @@ export default function ReportsDashboard({ onLogout }) {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard title="Today's Sale Orders" value={reportData?.ordersCount || 0} subtitle="Orders" icon={<Package size={18} />} type="blue" />
+        <StatCard 
+          title="Today's Sales" 
+          value={
+            <span title={`Rs ${formatFull(reportData?.totalSales || 0)}`}>
+              Rs {formatCurrency(reportData?.totalSales || 0)}
+            </span>
+          } 
+          subtitle={`${reportData?.ordersCount || 0} Orders`} 
+          tooltip={`Total Sales: Rs ${formatFull(reportData?.totalSales || 0)}`}
+          icon={<Package size={18} />} 
+          type="blue" 
+        />
         <StatCard 
           title="Total Received" 
           value={`Rs ${formatCurrency(reportData?.totalReceived)}`} 
@@ -114,6 +267,8 @@ export default function ReportsDashboard({ onLogout }) {
           subtitle="Customers + Walk-in" 
           icon={<ArrowDown size={18} />} 
           type="green"
+          onClick={() => openDetailsPage("sales")}
+          className="cursor-pointer"
         />
         <StatCard 
           title="Total Paid to Suppliers" 
@@ -122,6 +277,28 @@ export default function ReportsDashboard({ onLogout }) {
           subtitle="Suppliers" 
           icon={<ArrowUp size={18} />} 
           type="red"
+          onClick={() => openDetailsPage("payments")}
+          className="cursor-pointer"
+        />
+        <StatCard 
+          title="Customer Returns" 
+          value={`Rs ${formatCurrency(reportData?.customerReturns)}`} 
+          tooltip={`Rs ${formatFull(reportData?.customerReturns)}`}
+          subtitle="Returned by customers" 
+          icon={<ArrowDown size={18} />} 
+          type="orange"
+          onClick={() => openDetailsPage("customerReturns")}
+          className="cursor-pointer"
+        />
+        <StatCard 
+          title="Supplier Returns" 
+          value={`Rs ${formatCurrency(reportData?.supplierReturns)}`} 
+          tooltip={`Rs ${formatFull(reportData?.supplierReturns)}`}
+          subtitle="Returned to suppliers" 
+          icon={<ArrowUp size={18} />} 
+          type="red"
+          onClick={() => openDetailsPage("supplierReturns")}
+          className="cursor-pointer"
         />
         <StatCard 
           title="Net Cash Flow Today" 
@@ -138,23 +315,28 @@ export default function ReportsDashboard({ onLogout }) {
           subtitle="Customers owe" 
           icon={<Users size={18} />} 
           type="yellow"
+          onClick={() => openDetailsPage("receivable")}
+          className="cursor-pointer"
         />
-        <StatCard title="Total Payable" value={`Rs ${formatCurrency(reportData?.totalPaid)}`} tooltip={`Rs ${formatFull(reportData?.totalPaid)}`} subtitle="To suppliers" icon={<CreditCard size={18} />} type="red" />
         <StatCard 
-          title="Cash in Hand" 
-          value={`Rs ${formatCurrency((reportData?.totalReceived || 0) - (reportData?.totalPaid || 0))}`} 
-          tooltip={`Rs ${formatFull((reportData?.totalReceived || 0) - (reportData?.totalPaid || 0))}`}
-          subtitle="Available balance" 
-          icon={<Wallet size={18} />} 
-          type="blue"
+          title="Total Payable" 
+          value={`Rs ${formatCurrency(reportData?.totalPayable)}`} 
+          tooltip={`Rs ${formatFull(reportData?.totalPayable)}`} 
+          subtitle="To suppliers" 
+          icon={<CreditCard size={18} />} 
+          type="red"
+          onClick={() => openDetailsPage("payable")}
+          className="cursor-pointer"
         />
         <StatCard 
           title="Total Profit (Est.)" 
           value={`Rs ${formatCurrency(reportData?.profit)}`} 
           tooltip={`Rs ${formatFull(reportData?.profit)}`}
-          subtitle="Today's estimate" 
+          subtitle="Click to export details" 
           icon={<TrendingUp size={18} />} 
           type="purple"
+          onClick={() => openDetailsPage("profit")}
+          className="cursor-pointer"
         />
         <StatCard 
           title="Total Stock Value" 
@@ -163,9 +345,27 @@ export default function ReportsDashboard({ onLogout }) {
           subtitle="Cost value" 
           icon={<Layers size={18} />} 
           type="teal"
+          onClick={() => openDetailsPage("inventory")}
+          className="cursor-pointer"
         />
-        <StatCard title="Low Stock Items" value={reportData?.lowStockItems || 0} subtitle="Items running low" icon={<AlertTriangle size={18} />} type="yellow" />
-        <StatCard title="Total Books in Inventory" value={reportData?.totalBooks || 0} subtitle="Total book copies" icon={<BookOpen size={18} />} type="blue" />
+        <StatCard 
+          title="Low Stock Items" 
+          value={reportData?.lowStockItems || 0} 
+          subtitle="Items running low" 
+          icon={<AlertTriangle size={18} />} 
+          type="yellow"
+          onClick={() => openDetailsPage("lowstock")}
+          className="cursor-pointer"
+        />
+        <StatCard 
+          title="Total Books in Inventory" 
+          value={reportData?.totalBooks || 0} 
+          subtitle="Total book copies" 
+          icon={<BookOpen size={18} />} 
+          type="blue"
+          onClick={() => openDetailsPage("inventory")}
+          className="cursor-pointer"
+        />
       </div>
 
       {/* Charts Section */}
@@ -201,6 +401,8 @@ export default function ReportsDashboard({ onLogout }) {
                 data={{
                   received: reportData?.totalReceived || 0,
                   paid: reportData?.totalPaid || 0,
+                  customerReturns: reportData?.customerReturns || 0,
+                  supplierReturns: reportData?.supplierReturns || 0,
                   profit: reportData?.profit || 0,
                 }}
               />
@@ -209,7 +411,6 @@ export default function ReportsDashboard({ onLogout }) {
         </div>
 
       </div>
-
     </div>
   );
 }

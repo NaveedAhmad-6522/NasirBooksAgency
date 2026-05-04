@@ -6,9 +6,19 @@ style.innerHTML = `
   @media print {
     body {
       background: white !important;
+      margin: 0;
     }
+
+    @page {
+      margin: 10mm;
+    }
+
     table {
       font-size: 12px;
+    }
+
+    button {
+      display: none !important;
     }
   }
 `;
@@ -103,17 +113,16 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   console.log("INVOICE CUSTOMER DEBUG:", { data, sale, customerData, customer });
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen flex flex-col items-center print:bg-white print:p-0">
-      <div className="w-[800px] flex justify-end mb-3 print:hidden">
+    <div className="p-6 bg-gray-100 flex flex-col items-center print:bg-white print:p-4 print:min-h-0 print:h-auto">
+      <div className="w-[800px] print:w-full print:max-w-[750px] print:h-auto">
+        <div className="bg-white w-full rounded-xl shadow-lg p-6 space-y-6 relative print:w-full print:shadow-none print:rounded-none print:p-4 print:break-inside-avoid">
+
         <button
-          onClick={() => window.print()}
-          className="bg-blue-600 text-white px-3 py-1.5 text-sm rounded-lg shadow hover:opacity-90 transition"
+          onClick={() => window.history.back()}
+          className="absolute top-3 right-3 text-gray-500 hover:text-black text-lg print:hidden"
         >
-          🖨 Print Invoice
+          ✕
         </button>
-      </div>
-      <div className="w-[800px]">
-        <div className="bg-white w-full rounded-xl shadow-lg p-6 space-y-6 print:w-full print:shadow-none print:rounded-none print:p-2">
 
         {/* HEADER */}
         <div className="flex justify-between items-start border-b pb-5">
@@ -190,7 +199,7 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
                 <th className="py-3 text-left">Item</th>
                 <th className="py-3 text-center">Qty</th>
                 <th className="py-3 text-right">Unit Price</th>
-                <th className="py-3 text-right">Discount</th>
+                <th className="py-3 text-right">%</th>
                 <th className="py-3 text-right">Disc Price</th>
                 <th className="py-3 text-right">Total</th>
               </tr>

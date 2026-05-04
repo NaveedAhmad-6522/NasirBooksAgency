@@ -13,7 +13,7 @@ import {
 
 function Sidebar() {
   return (
-    <div className="w-44 bg-gradient-to-b from-[#0f172a] to-[#1e293b] text-white flex flex-col min-h-screen">
+    <div className="fixed top-0 left-0 h-screen w-44 bg-gradient-to-b from-[#0f172a] to-[#1e293b] text-white flex flex-col z-50 overflow-y-auto">
 
       {/* LOGO */}
       <div className="p-5 border-b border-gray-700">
@@ -39,12 +39,10 @@ function Sidebar() {
         <SidebarItem icon={<Wallet size={18} />} label="Billing (POS)" to="/pos" />
 
         <SidebarItem icon={<BookOpen size={18} />} label="Books" to="/books" />
-        <SidebarItem icon={<Package size={18} />} label="Stock" to="/stock" />
         <SidebarItem icon={<Users size={18} />} label="Customers" to="/customers" />
         <SidebarItem icon={<Truck size={18} />} label="Suppliers" to="/suppliers" />
         <SidebarItem icon={<FileText size={18} />} label="Orders" to="/sales" />
         <SidebarItem icon={<BarChart3 size={18} />} label="Reports" to="/reports" />
-        <SidebarItem icon={<Wallet size={18} />} label="Expenses" to="/expenses" />
         <SidebarItem icon={<Settings size={18} />} label="Settings" to="/settings" />
       </div>
 
