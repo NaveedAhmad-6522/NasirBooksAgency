@@ -1,5 +1,3 @@
-
-
 import { useEffect, useState } from "react";
 
 export default function Settings() {
@@ -8,18 +6,24 @@ export default function Settings() {
   );
 
   useEffect(() => {
-    const root = window.document.documentElement;
+    const root = document.documentElement;
+    const body = document.body;
 
     const applyTheme = (t) => {
+      root.classList.remove("dark");
+      body.classList.remove("dark");
+
       if (t === "dark") {
         root.classList.add("dark");
+        body.classList.add("dark");
       } else if (t === "light") {
-        root.classList.remove("dark");
+        // already removed above
       } else {
-        // system preference
         const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (prefersDark) root.classList.add("dark");
-        else root.classList.remove("dark");
+        if (prefersDark) {
+          root.classList.add("dark");
+          body.classList.add("dark");
+        }
       }
     };
 

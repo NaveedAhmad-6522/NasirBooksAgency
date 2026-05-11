@@ -12,6 +12,8 @@ import salesRoutes from "./routes/sales.js";
 import customersRoutes from "./routes/customers.js";
 import customerDiscountRoutes from "./routes/customerDiscounts.js";
 import reportRoutes from "./routes/reportsroute.js";
+import loginRoutes from "./routes/login.js";
+
 dotenv.config();
 
 const app = express();
@@ -29,6 +31,8 @@ app.use("/api/discount", discountRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/reports", reportRoutes);
+
+app.use("/api", loginRoutes);
 // 🔹 TEST ROUTE
 app.get("/", (req, res) => {
   res.send("Backend Running 🚀");

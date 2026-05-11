@@ -138,6 +138,12 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
               <div className="flex items-center gap-2">
                 <span>💬</span>
                 <span>0302-8884377</span>
+                
+              </div>
+              <div className="flex items-center gap-2">
+                <span>💬</span>
+                <span>0311-3888849</span>
+                
               </div>
             </div>
           </div>
