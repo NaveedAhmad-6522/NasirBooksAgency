@@ -43,7 +43,6 @@ function Sidebar() {
         <SidebarItem icon={<Truck size={18} />} label="Suppliers" to="/suppliers" />
         <SidebarItem icon={<FileText size={18} />} label="Orders" to="/sales" />
         <SidebarItem icon={<BarChart3 size={18} />} label="Reports" to="/reports" />
-        <SidebarItem icon={<Settings size={18} />} label="Settings" to="/settings" />
       </div>
 
       {/* SUMMARY CARD */}

@@ -17,19 +17,30 @@ export default function Login() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
         body: JSON.stringify({ username, password }),
       });
 
       const data = await res.json();
 
+      if (!data.token && res.ok) {
+        throw new Error("Authentication token missing");
+      }
+
       if (!res.ok) {
         throw new Error(data.message || "Login failed");
       }
 
       localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-      window.location.href = "/Dashboard";
+      // verify token exists before redirect
+      if (!data.token) {
+        throw new Error("Authentication token missing");
+      }
+
+      window.location.replace("/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -111,7 +122,7 @@ export default function Login() {
           </div>
 
           {error && (
-            <div className="text-sm text-red-500 text-center bg-red-100 dark:bg-red-900/30 p-2 rounded-lg">
+            <div className="text-sm text-red-600 dark:text-red-300 text-center bg-red-100/80 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-3 rounded-xl backdrop-blur-sm animate-pulse">
               {error}
             </div>
           )}
@@ -120,9 +131,16 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-slate-700 via-gray-800 to-black hover:from-slate-800 hover:via-gray-900 hover:to-black text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-60"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-slate-700 via-gray-800 to-black hover:from-slate-800 hover:via-gray-900 hover:to-black text-white font-semibold shadow-lg hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? "Signing in..." : "Login"}
+            {loading ? (
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></div>
+                Signing in...
+              </div>
+            ) : (
+              "Login"
+            )}
           </button>
         </form>
 

@@ -1,6 +1,3 @@
-
-
-
 import db from "../config/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -38,7 +35,7 @@ export const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      process.env.JWT_SECRET || "secret123",
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -58,11 +55,11 @@ export const login = async (req, res) => {
 
 // Optional: create default admin if not exists
 export const seedAdmin = async () => {
-  const [users] = await db.query("SELECT * FROM users WHERE username = 'admin'");
+  const [users] = await db.promise().query("SELECT * FROM users WHERE username = 'admin'");
 
   if (users.length === 0) {
     const hashed = await bcrypt.hash("1234", 10);
-    await db.query("INSERT INTO users (username, password) VALUES (?, ?)", [
+    await db.promise().query("INSERT INTO users (username, password) VALUES (?, ?)", [
       "admin",
       hashed,
     ]);

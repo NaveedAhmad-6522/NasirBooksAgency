@@ -18,11 +18,31 @@ import Login from "./pages/login.jsx";
 import { Navigate } from "react-router-dom";
 
 const isAuthenticated = () => {
-  return !!localStorage.getItem("token");
+  const token = localStorage.getItem("token");
+
+  if (!token) return false;
+
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+
+    const isExpired = payload.exp * 1000 < Date.now();
+
+    if (isExpired) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      return false;
+    }
+
+    return true;
+  } catch {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    return false;
+  }
 };
 
 const ProtectedRoute = ({ children }) => {
-  return isAuthenticated() ? children : <Navigate to="/login" />;
+  return isAuthenticated() ? children : <Navigate to="/login" replace />;
 };
 
 function Layout() {
@@ -35,7 +55,7 @@ function Layout() {
       <div className={`${!isLoginPage ? "ml-44" : ""} w-full min-h-screen bg-gray-50`}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/Dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/pos" element={<ProtectedRoute><POS /></ProtectedRoute>} />
           <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
           <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
@@ -49,7 +69,7 @@ function Layout() {
           <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
           <Route path="/reports/details" element={<ProtectedRoute><DetailsPage /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="*" element={<Navigate to={isAuthenticated() ? "/Dashboard" : "/login"} />} />
+          <Route path="*" element={<Navigate to={isAuthenticated() ? "/dashboard" : "/login"} replace />} />
         </Routes>
       </div>
     </div>
