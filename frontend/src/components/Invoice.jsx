@@ -117,12 +117,6 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
       <div className="w-[800px] print:w-full print:max-w-[750px] print:h-auto">
         <div className="bg-white w-full rounded-xl shadow-lg p-6 space-y-6 relative print:w-full print:shadow-none print:rounded-none print:p-4 print:break-inside-avoid">
 
-        <button
-          onClick={() => window.history.back()}
-          className="absolute top-3 right-3 text-gray-500 hover:text-black text-lg print:hidden"
-        >
-          ✕
-        </button>
 
         {/* HEADER */}
         <div className="flex justify-between items-start border-b pb-5">

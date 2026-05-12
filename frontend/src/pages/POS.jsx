@@ -465,7 +465,15 @@ function POS() {
 
       {showInvoice && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-center items-start overflow-auto print:bg-white">
-          <div className="bg-white mt-10 p-6 rounded-xl shadow-lg w-[800px] print:w-full print:shadow-none print:rounded-none print:mt-0 print:p-0">
+          <div className="relative bg-white mt-10 p-6 rounded-xl shadow-lg w-[800px] print:w-full print:shadow-none print:rounded-none print:mt-0 print:p-0">
+
+            <button
+              onClick={() => setShowInvoice(false)}
+              className="absolute top-3 right-3 no-print w-9 h-9 rounded-full bg-gray-100 hover:bg-red-500 hover:text-white transition flex items-center justify-center text-lg font-bold"
+            >
+              ×
+            </button>
+
             <div className="print-area">
               <Invoice
                 cart={invoiceData?.cart || []}
@@ -474,7 +482,7 @@ function POS() {
                 mode="pos"
               />
             </div>
-            
+
           </div>
         </div>
       )}
