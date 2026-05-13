@@ -112,13 +112,13 @@ function Sales() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100 text-sm">
+    <div className="h-screen flex bg-gray-100 text-sm overflow-hidden">
 
       <Sidebar />
 
-      <div className="flex-1 p-6 overflow-auto space-y-4">
+      <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto space-y-4 w-full max-w-[1800px] mx-auto min-w-0">
 
-        <h1 className="text-xl font-bold">Sales History</h1>
+        <h1 className="text-lg sm:text-xl font-bold">Sales History</h1>
 
         <SalesHeader
           search={search}
@@ -144,6 +144,7 @@ function Sales() {
         {!loading && <SalesStats sales={sales} filter={filter} />}
 
         {!loading && (
+          <div className="overflow-x-auto rounded-xl">
           <SalesTable
             sales={filteredSales.map(s => ({
               ...s,
@@ -154,6 +155,7 @@ function Sales() {
             }))}
             onView={handleView}
           />
+          </div>
         )}
 
         {!loading && filteredSales.length === 0 && (
@@ -167,9 +169,9 @@ function Sales() {
 
       {/* 🔥 INVOICE MODAL */}
       {selectedSale && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4 overflow-auto">
 
-          <div className="bg-white rounded-xl p-6 w-[600px] shadow-lg">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-[600px] shadow-lg">
 
             <h2 className="text-lg font-bold mb-4 border-b pb-2">
               Invoice #{selectedSale.sale.id}
@@ -183,8 +185,8 @@ function Sales() {
               
             </div>
 
-            <div className="border rounded-lg overflow-hidden text-sm">
-              <div className="grid grid-cols-4 bg-gray-100 px-3 py-2 font-semibold">
+            <div className="border rounded-lg overflow-x-auto text-sm">
+              <div className="grid grid-cols-4 min-w-[500px] bg-gray-100 px-3 py-2 font-semibold">
                 <div>Book</div>
                 <div>Qty</div>
                 <div>Price</div>
@@ -192,7 +194,7 @@ function Sales() {
               </div>
 
               {selectedSale.items.map((item) => (
-                <div key={item.id} className="grid grid-cols-4 px-3 py-2 border-t">
+                <div key={item.id} className="grid grid-cols-4 min-w-[500px] px-3 py-2 border-t">
                   <div>{item.title}</div>
                   <div>{item.quantity}</div>
                   <div>Rs {item.price}</div>
@@ -213,18 +215,18 @@ function Sales() {
               )}
             </div>
 
-            <div className="mt-5 flex justify-between">
+            <div className="mt-5 flex flex-col sm:flex-row justify-between gap-3">
 
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 w-full sm:w-auto"
               >
                 Print
               </button>
 
               <button
                 onClick={() => setSelectedSale(null)}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 w-full sm:w-auto"
               >
                 Close
               </button>

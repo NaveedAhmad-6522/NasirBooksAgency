@@ -224,15 +224,15 @@ function Customers() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100 text-sm">
+    <div className="h-screen flex bg-gray-100 text-sm overflow-hidden">
 
       <Sidebar />
 
-      <div className="flex-1 flex flex-col p-6 overflow-hidden">
+      <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden w-full max-w-[1800px] mx-auto">
 
-        <div className="flex-1 space-y-4 overflow-auto">
+        <div className="flex-1 space-y-4 overflow-auto min-w-0">
 
-          <h1 className="text-xl font-bold">Customers</h1>
+          <h1 className="text-lg sm:text-xl font-bold">Customers</h1>
 
           <CustomersHeader
             search={search}
@@ -253,10 +253,12 @@ function Customers() {
           {loading ? (
             <div className="text-center py-10 text-gray-400">Loading...</div>
           ) : (
-            <CustomersTable 
-              customers={customers} 
-              onViewLedger={openLedger}
-            />
+            <div className="overflow-x-auto rounded-xl">
+              <CustomersTable 
+                customers={customers} 
+                onViewLedger={openLedger}
+              />
+            </div>
           )}
           <PaymentModal
             show={showPayment}
@@ -280,15 +282,15 @@ function Customers() {
         </div>
 
         {/* PAGINATION FIX */}
-        <div className="flex justify-between items-center mt-4 px-2">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 px-2">
 
-          <span className="text-sm text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
           Showing {(page - 1) * limit + 1} to{" "}
 {Math.min(page * limit, total)} of {total} customers
            
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
 
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}

@@ -4,39 +4,47 @@ import { Printer, MessageCircle } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 
-const authHeaders = () => ({
-  "Content-Type": "application/json",
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
-
-const style = document.createElement("style");
-style.innerHTML = `
-  @media print {
-    body {
-      background: white !important;
-      margin: 0;
-    }
-
-    @page {
-      margin: 10mm;
-    }
-
-    table {
-      font-size: 12px;
-    }
-
-    button {
-      display: none !important;
-    }
-  }
-`;
-document.head.appendChild(style);
 
 function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [booksMap, setBooksMap] = useState({});
   const [customerInfo, setCustomerInfo] = useState(null);
+
+  useEffect(() => {
+    const style = document.createElement("style");
+
+    style.innerHTML = `
+      @media print {
+        body {
+          background: white !important;
+          margin: 0;
+        }
+
+        @page {
+          margin: 10mm;
+        }
+
+        table {
+          font-size: 12px;
+        }
+
+        button {
+          display: none !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   useEffect(() => {
     if (mode === "pos") return; // skip API in POS
@@ -65,6 +73,7 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   }, [data]);
 
   useEffect(() => {
+    if (mode === "pos") return;
     // fetch minimal books list once (or when id changes)
     fetch(`${API_BASE}/api/books?fields=id,title,publisher,edition`, {
       headers: authHeaders(),

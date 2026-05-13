@@ -1,10 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-const API = import.meta.env.VITE_API_URL;
 
-const authHeaders = (json = false) => ({
-  ...(json ? { "Content-Type": "application/json" } : {}),
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
 import { useNavigate } from "react-router-dom";
 import SuppliersHeader from "../components/SuppliersHeader";
 import SuppliersStats from "../components/SuppliersStats";
@@ -12,7 +7,12 @@ import SuppliersTable from "../components/SuppliersTable";
 import SupplierModal from "../components/SupplierModal";
 import Sidebar from "../components/Sidebar";
 import Footer from "../components/Footer";
+const API = import.meta.env.VITE_API_URL;
 
+const authHeaders = (json = false) => ({
+    ...(json ? { "Content-Type": "application/json" } : {}),
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
     if (!onClose) return null; // safety guard
     const [form, setForm] = useState({
@@ -37,115 +37,114 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
 
     // --- Selected supplier lookup ---
     const selectedSupplier = suppliers.find(
-      (s) => String(s.id) === String(form.supplier_id)
+        (s) => String(s.id) === String(form.supplier_id)
     );
 
     useEffect(() => {
-      if (!search.trim()) {
-        setResults([]);
-        return;
-      }
-
-      const fetchSearch = async () => {
-        try {
-          setLoadingSearch(true);
-
-          const res = await fetch(
-            `${API}/api/suppliers?search=${search}&limit=10`,
-            {
-              headers: authHeaders(),
-            }
-          );
-          const data = await res.json();
-
-          setResults(data.data || data);
-        } catch (err) {
-          console.error("Search error:", err);
-        } finally {
-          setLoadingSearch(false);
+        if (!search.trim()) {
+            setResults([]);
+            return;
         }
-      };
 
-      const delay = setTimeout(fetchSearch, 300);
-      return () => clearTimeout(delay);
+        const fetchSearch = async () => {
+            try {
+                setLoadingSearch(true);
+
+                const res = await fetch(
+                    `${API}/api/suppliers?search=${search}&limit=10`,
+                    {
+                        headers: authHeaders(),
+                    }
+                );
+                const data = await res.json();
+
+                setResults(data.data || data);
+            } catch (err) {
+                console.error("Search error:", err);
+            } finally {
+                setLoadingSearch(false);
+            }
+        };
+
+        const delay = setTimeout(fetchSearch, 300);
+        return () => clearTimeout(delay);
     }, [search]);
 
     useEffect(() => {
-      const handleClickOutside = () => setShowDropdown(false);
-      window.addEventListener("click", handleClickOutside);
-      return () => window.removeEventListener("click", handleClickOutside);
+        const handleClickOutside = () => setShowDropdown(false);
+        window.addEventListener("click", handleClickOutside);
+        return () => window.removeEventListener("click", handleClickOutside);
     }, []);
 
     return (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          style={{ pointerEvents: "auto" }}
-          onClick={onClose}
+        className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4 overflow-auto"            style={{ pointerEvents: "auto" }}
+            onClick={onClose}
         >
             <div
-              className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4"
-              onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4"
+                onClick={(e) => e.stopPropagation()}
             >
                 <h2 className="text-lg font-semibold">Supplier Payment</h2>
 
                 <form onSubmit={handleSubmit} className="space-y-3">
 
                     <div className="relative">
-                      <input
-                        placeholder="Search supplier..."
-                        value={search}
-                        onChange={(e) => {
-                          setSearch(e.target.value);
-                          setShowDropdown(true);
-                        }}
-                        onFocus={() => setShowDropdown(true)}
-                        className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
+                        <input
+                            placeholder="Search supplier..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setShowDropdown(true);
+                            }}
+                            onFocus={() => setShowDropdown(true)}
+                            className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
 
-                      {showDropdown && search && (
-                        <div className="absolute z-50 w-full bg-white border rounded-lg mt-1 max-h-40 overflow-y-auto shadow-lg">
-                          {loadingSearch && (
-                            <div className="px-3 py-2 text-gray-400 text-sm">
-                              Searching...
-                            </div>
-                          )}
-                          {results.map((s) => (
-                            <div
-                              key={s.id}
-                              onClick={() => {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  supplier_id: s.id,
-                                }));
-                                setSearch(s.name);
-                                setShowDropdown(false);
-                              }}
-                              className="px-3 py-2 hover:bg-blue-50 cursor-pointer"
-                            >
-                              {s.name}
-                            </div>
-                          ))}
+                        {showDropdown && search && (
+                            <div className="absolute z-50 w-full bg-white border rounded-lg mt-1 max-h-40 overflow-y-auto shadow-lg">
+                                {loadingSearch && (
+                                    <div className="px-3 py-2 text-gray-400 text-sm">
+                                        Searching...
+                                    </div>
+                                )}
+                                {results.map((s) => (
+                                    <div
+                                        key={s.id}
+                                        onClick={() => {
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                supplier_id: s.id,
+                                            }));
+                                            setSearch(s.name);
+                                            setShowDropdown(false);
+                                        }}
+                                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer"
+                                    >
+                                        {s.name}
+                                    </div>
+                                ))}
 
-                          {!loadingSearch && results.length === 0 && (
-                            <div className="px-3 py-2 text-gray-400 text-sm">
-                              No supplier found
+                                {!loadingSearch && results.length === 0 && (
+                                    <div className="px-3 py-2 text-gray-400 text-sm">
+                                        No supplier found
+                                    </div>
+                                )}
                             </div>
-                          )}
-                        </div>
-                      )}
+                        )}
                     </div>
 
                     {/* Selected supplier + balance */}
                     {selectedSupplier && (
-                      <div className="text-sm bg-gray-50 p-2 rounded-lg border">
-                        <div className="font-medium">{selectedSupplier.name}</div>
-                        <div>
-                          Remaining:{" "}
-                          <span className="text-red-600 font-semibold">
-                            {Number(selectedSupplier.balance || 0).toLocaleString()}
-                          </span>
+                        <div className="text-sm bg-gray-50 p-2 rounded-lg border">
+                            <div className="font-medium">{selectedSupplier.name}</div>
+                            <div>
+                                Remaining:{" "}
+                                <span className="text-red-600 font-semibold">
+                                    {Number(selectedSupplier.balance || 0).toLocaleString()}
+                                </span>
+                            </div>
                         </div>
-                      </div>
                     )}
 
                     <input
@@ -189,15 +188,15 @@ export default function Suppliers() {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [allSuppliers, setAllSuppliers] = useState([]);
     const fetchAllSuppliers = async () => {
-      try {
-        const res = await fetch(`${API}/api/suppliers?limit=10000`, {
-          headers: authHeaders(),
-        });
-        const data = await res.json();
-        setAllSuppliers(data.data || data);
-      } catch (err) {
-        console.error("Fetch all suppliers error:", err);
-      }
+        try {
+            const res = await fetch(`${API}/api/suppliers?limit=10000`, {
+                headers: authHeaders(),
+            });
+            const data = await res.json();
+            setAllSuppliers(data.data || data);
+        } catch (err) {
+            console.error("Fetch all suppliers error:", err);
+        }
     };
     const tableWrapperRef = useRef(null);
     const headerRef = useRef(null);
@@ -242,9 +241,9 @@ export default function Suppliers() {
             let rows = data.data || data;
             // 🔥 fallback filter (frontend safety)
             if (filter === "active") {
-              rows = rows.filter(s => Number(s.is_active) === 1);
+                rows = rows.filter(s => Number(s.is_active) === 1);
             } else if (filter === "inactive") {
-              rows = rows.filter(s => Number(s.is_active) === 0);
+                rows = rows.filter(s => Number(s.is_active) === 0);
             }
             console.log("RAW API RESPONSE:", data);
             console.log("FETCHED SUPPLIERS:", rows);
@@ -262,7 +261,7 @@ export default function Suppliers() {
     const fetchStats = async () => {
         try {
             const res = await fetch(`${API}/api/suppliers/stats`, {
-              headers: authHeaders(),
+                headers: authHeaders(),
             });
             const data = await res.json();
             setStatsData(data);
@@ -425,19 +424,16 @@ export default function Suppliers() {
     const totalPages = Math.ceil(total / limit);
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
-
+        <div className="flex min-h-screen bg-gray-50 overflow-hidden">
             {/* SIDEBAR */}
             <Sidebar />
 
             {/* MAIN CONTENT */}
-            <div className="flex-1 flex flex-col">
-
+            <div className="flex-1 flex flex-col min-w-0 w-full max-w-[1800px] mx-auto">
                 {/* PAGE CONTENT */}
-                {console.log("MODAL STATE:", { showModal, showPaymentModal })}
-                <div className="flex-1 p-6" ref={tableWrapperRef}>
-                    <div className="max-w-7xl mx-auto space-y-6" ref={headerRef}>
-
+                
+                <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto min-w-0" ref={tableWrapperRef}>
+                    <div className="w-full space-y-6 min-w-0" ref={headerRef}>
                         <SuppliersHeader
                             search={search}
                             setSearch={setSearch}
@@ -454,25 +450,24 @@ export default function Suppliers() {
 
                         <SuppliersStats suppliers={suppliers} statsData={statsData} />
 
-                        <SuppliersTable
-                            suppliers={suppliers}
-                            loading={loading}
-                            onLedger={handleOpenLedger}
-                            onDelete={handleDelete}
-                            onToggleStatus={handleToggleStatus}
-                            onEdit={handleEdit}
-                        />
-
+                        <div className="overflow-x-auto rounded-xl min-w-0">
+                            <SuppliersTable
+                                suppliers={suppliers}
+                                loading={loading}
+                                onLedger={handleOpenLedger}
+                                onDelete={handleDelete}
+                                onToggleStatus={handleToggleStatus}
+                                onEdit={handleEdit}
+                            />
+                        </div>
                         {/* PREMIUM PAGINATION */}
                         {totalPages > 1 && (
-                            <div className="flex justify-between items-center mt-6">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-6">
+                                <span className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
+    Showing {(page - 1) * limit + 1} - {Math.min(page * limit, total)} of {total}
+</span>
 
-                                <span className="text-sm text-gray-500">
-                                    Showing {(page - 1) * limit + 1} - {Math.min(page * limit, total)} of {total}
-                                </span>
-
-                                <div className="flex items-center gap-2">
-
+                                <div className="flex flex-wrap items-center justify-center gap-2">
                                     {/* PREV */}
                                     <button
                                         type="button"
@@ -499,8 +494,8 @@ export default function Suppliers() {
                                                     type="button"
                                                     onClick={() => setPage(p)}
                                                     className={`px-3 py-1.5 rounded-lg text-sm ${page === p
-                                                            ? "bg-blue-600 text-white"
-                                                            : "border hover:bg-gray-100"
+                                                        ? "bg-blue-600 text-white"
+                                                        : "border hover:bg-gray-100"
                                                         }`}
                                                 >
                                                     {p}

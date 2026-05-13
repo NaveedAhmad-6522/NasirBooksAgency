@@ -217,7 +217,7 @@ const [restockData, setRestockData] = useState({
       <Sidebar />
 
       <div className="flex-1 flex flex-col">
-        <div className="p-6">
+        <div className="p-4 sm:p-6 max-w-[1800px] mx-auto w-full">
           <BooksHeader
             search={search}
             setSearch={setSearch}
@@ -225,11 +225,11 @@ const [restockData, setRestockData] = useState({
             onExport={handleExport}
           />
 
-          <div className="mb-4 flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3 rounded-lg shadow-sm">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-600">Filter</span>
 
-              <div className="flex bg-gray-100 rounded-lg p-1">
+              <div className="flex flex-wrap bg-gray-100 rounded-lg p-1 gap-1">
                 <button
                   onClick={() => setFilterStatus("all")}
                   className={`px-3 py-1 text-sm rounded-md transition ${
@@ -274,6 +274,7 @@ const [restockData, setRestockData] = useState({
             <div className="text-center p-6">Loading...</div>
           ) : (
             <>
+              <div className="overflow-x-auto rounded-xl">
               <BooksTable
                 books={paginatedBooks}
                 onToggleStatus={handleToggleStatus}
@@ -289,8 +290,9 @@ const [restockData, setRestockData] = useState({
                   });
                 }}
               />
+              </div>
 
-              <div className="flex justify-between items-center mt-4">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4">
                 <button
                   disabled={currentPage === 1}
                   onClick={() => setCurrentPage((p) => p - 1)}
@@ -346,7 +348,7 @@ const [restockData, setRestockData] = useState({
 
         {restockBook && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-xl w-[400px] space-y-4 shadow-lg">
+            <div className="bg-white p-6 rounded-xl w-full max-w-md space-y-4 shadow-lg mx-4">
 
               <h2 className="text-lg font-semibold">
                 Restock: {restockBook.title}

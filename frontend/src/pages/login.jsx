@@ -50,26 +50,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-200 via-slate-200 to-gray-300 dark:from-gray-950 dark:via-gray-900 dark:to-gray-800">
-      <div className="w-full max-w-md backdrop-blur-xl bg-white/70 dark:bg-gray-900/70 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.2)] p-8 border border-white/30">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-200 via-slate-200 to-gray-300 dark:from-gray-950 dark:via-gray-900 dark:to-gray-800 px-4 py-6 overflow-auto">
+      <div className="w-full max-w-md sm:max-w-lg backdrop-blur-xl bg-white/70 dark:bg-gray-900/70 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.2)] p-5 sm:p-8 border border-white/30">
 
         {/* Logo + Title */}
         <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-5 rounded-full overflow-hidden bg-white flex items-center justify-center shadow-lg border border-gray-200">
+          <div className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-5 rounded-full overflow-hidden bg-white flex items-center justify-center shadow-lg border border-gray-200">
             <img
               src="/logo.png"
               alt="Nasir Book Agency Logo"
               className="w-full h-full object-cover scale-110"
             />
           </div>
-          <h1 className="text-2xl font-semibold text-gray-800 dark:text-white">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-white">
             Nasir Book Agency
           </h1>
           <p className="text-sm text-gray-500 mt-1">Login to continue</p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
 
           {/* Username */}
           <div className="relative">
@@ -83,7 +83,7 @@ export default function Login() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Username"
             />
           </div>
@@ -101,7 +101,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-10 py-2.5 sm:py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm sm:text-base text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Password"
             />
 
@@ -132,7 +132,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-slate-700 via-gray-800 to-black hover:from-slate-800 hover:via-gray-900 hover:to-black text-white font-semibold shadow-lg hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-slate-700 via-gray-800 to-black hover:from-slate-800 hover:via-gray-900 hover:to-black text-white font-semibold shadow-lg hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed text-sm sm:text-base"
           >
             {loading ? (
               <div className="flex items-center justify-center gap-2">

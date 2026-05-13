@@ -219,12 +219,11 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
     <Sidebar />
 
     <div className="flex-1 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
-      <div className="p-4 space-y-4 flex-1">
-
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 flex-1 w-full max-w-[1800px] mx-auto">
       {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-gray-800">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-gray-800">
             <LayoutDashboard className="text-gray-700" />
             Dashboard
           </h1>
@@ -233,7 +232,7 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative" ref={dropdownRef}>
             <div
               onClick={() => setOpen(!open)}
@@ -284,7 +283,7 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       </div>
 
       {/* TOP CARDS */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
 
         {/* SALES (CONFIDENTIAL) */}
         <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-lg transition-all duration-300 flex flex-col gap-3 opacity-70">
@@ -400,11 +399,11 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       
 
       {/* SALES CHART PLACEHOLDER */}
-      <div className="bg-white/90 backdrop-blur p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-lg transition-all duration-300">
+      <div className="bg-white/90 backdrop-blur p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-lg transition-all duration-300 overflow-hidden">
         <h2 className="font-semibold text-gray-800 mb-4">
           {filter === "Today" ? "Sales (Today - Hourly)" : `Sales (${filter})`}
         </h2>
-        <div className="w-full h-[200px] overflow-hidden">
+        <div className="w-full h-[220px] sm:h-[260px] overflow-hidden">
           {hasData ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
@@ -444,7 +443,7 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
       </div>
 
       {/* BOTTOM TABLES */}
-      <div className="grid grid-cols-2 gap-3 items-stretch">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-stretch">
 
         {/* TOP BOOKS */}
         <div className="bg-white/90 backdrop-blur p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col">
@@ -453,9 +452,9 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
             <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md">Scroll</span>
           </h2>
           <div
-            className="flex-1 overflow-x-auto max-h-[260px] overflow-y-auto rounded-xl border border-gray-200 shadow-sm bg-white/80 backdrop-blur"
+           className="flex-1 overflow-x-auto max-h-[260px] overflow-y-auto rounded-xl border border-gray-200 shadow-sm bg-white/80 backdrop-blur min-w-0"
           >
-          <table className="w-full text-sm">
+        <table className="min-w-[650px] w-full text-sm">
             <thead className="sticky top-0 bg-gray-50 z-10 text-gray-600 text-xs uppercase tracking-wide">
               <tr className="text-left text-gray-500 text-xs uppercase tracking-wide border-b">
                 <th>#</th>
@@ -504,7 +503,7 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
             className="flex-1 overflow-x-auto max-h-[260px] overflow-y-auto rounded-xl border border-gray-200 shadow-sm bg-white/80 backdrop-blur"
             onScroll={handleLowStockScroll}
           >
-          <table className="w-full text-sm">
+        <table className="min-w-[650px] w-full text-sm">
             <thead className="sticky top-0 bg-gray-50 z-10 text-gray-600 text-xs uppercase tracking-wide">
               <tr className="text-left text-gray-500 text-xs uppercase tracking-wide border-b">
                 <th>#</th>

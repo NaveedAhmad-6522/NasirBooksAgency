@@ -383,11 +383,11 @@ function POS() {
     );
   };
   return (
-    <div className="h-screen flex bg-gray-100 text-sm">
+    <div className="h-screen flex bg-gray-100 text-sm overflow-hidden">
 
       <Sidebar />
 
-      <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden">
+      <div className="flex-1 flex flex-col p-3 sm:p-4 lg:p-6 gap-3 overflow-hidden w-full max-w-[1800px] mx-auto min-w-0">
 
         {/* HEADER */}
         <Header
@@ -405,22 +405,22 @@ function POS() {
         <Filters category={category} setCategory={setCategory} />
 
         {/* CONTENT */}
-        <div className="flex flex-1 gap-3 overflow-hidden">
+        <div className="flex flex-col xl:flex-row flex-1 gap-3 overflow-hidden min-h-0">
 
           {/* LEFT */}
-          <div className="flex-[2.3] flex flex-col gap-3 overflow-hidden">
+          <div className="xl:flex-[2.3] flex flex-col gap-3 overflow-hidden min-w-0">
 
-            <div className="bg-white rounded-xl shadow-sm p-3">
+            <div className="bg-white rounded-xl shadow-sm p-3 flex-shrink-0">
               <input
                 type="text"
                 placeholder="Search book..."
                 value={query}
                 onChange={handleSearch}
-                className="w-full bg-gray-100 rounded-lg px-3 py-2 outline-none"
+                className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm sm:text-base outline-none"
               />
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm flex-1 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-sm flex-1 overflow-auto min-h-0">
               <BookGrid
                 books={books}
                 category={category}
@@ -443,7 +443,7 @@ function POS() {
             paid={paid}
             setPaid={setPaid}
             customer={customer}
-            className="flex-[1.7] h-full overflow-hidden"
+            className="xl:flex-[1.7] h-full overflow-hidden min-h-0"
           />
 
         </div>
@@ -467,7 +467,7 @@ function POS() {
         paid={paid}
       />
       {toast && (
-        <div className="fixed bottom-5 right-5 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+        <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm sm:text-base max-w-[90vw]">
           {toast}
         </div>
       )}
@@ -476,7 +476,7 @@ function POS() {
 
       {showInvoice && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-center items-start overflow-auto print:bg-white">
-          <div className="relative bg-white mt-10 p-6 rounded-xl shadow-lg w-[800px] print:w-full print:shadow-none print:rounded-none print:mt-0 print:p-0">
+          <div className="relative bg-white mt-4 sm:mt-10 p-3 sm:p-6 rounded-xl shadow-lg w-full max-w-[800px] mx-2 sm:mx-4 print:w-full print:shadow-none print:rounded-none print:mt-0 print:p-0">
 
             <button
               onClick={() => setShowInvoice(false)}
