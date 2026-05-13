@@ -8,7 +8,8 @@ import {
   exportCustomers,
   getCustomerSales,
   addCustomerReturn,
-  getCustomerById
+  getCustomerById,
+  updateLedgerTransaction
 } from "../controllers/customersController.js";
 
 const router = express.Router();
@@ -39,7 +40,10 @@ router.get("/:id", getCustomerById);
    🔁 CUSTOMER RETURN
 ========================= */
 router.post("/return", addCustomerReturn);
+
+/* =========================
+   ✏️ UPDATE LEDGER TRANSACTION
+========================= */
+router.put("/:customerId/ledger/:id", updateLedgerTransaction);
+
 export default router;
-
-
-

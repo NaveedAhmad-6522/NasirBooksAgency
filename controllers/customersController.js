@@ -152,15 +152,31 @@ export const getCustomerLedger = (req, res) => {
       const ledgerSql = `
   SELECT id, amount, created_at, type, items FROM (
 
-    -- ✅ INDIVIDUAL SALES (no grouping)
+    -- ✅ INDIVIDUAL SALES (with invoice items)
     SELECT 
-      id,
-      total_amount AS amount,
-      created_at,
+      s.id,
+      s.total_amount AS amount,
+      s.created_at,
       'sale' AS type,
-      NULL AS items
-    FROM sales
-    WHERE customer_id = ?
+      (
+        SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'id', si.id,
+            'book_id', si.book_id,
+            'quantity', si.quantity,
+            'price', si.price,
+            'discount', si.discount,
+            'title', b.title,
+            'publisher', b.publisher,
+            'edition', b.edition
+          )
+        )
+        FROM sale_items si
+        LEFT JOIN books b ON b.id = si.book_id
+        WHERE si.sale_id = s.id
+      ) AS items
+    FROM sales s
+    WHERE s.customer_id = ?
 
     UNION ALL
 
@@ -318,6 +334,241 @@ export const getCustomerStats = (req, res) => {
   });
 };
 
+export const updateLedgerTransaction = (req, res) => {
+  const { id } = req.params;
+  const { type, amount } = req.body;
+
+  const newAmount = Number(amount || 0);
+
+  if (!type || !newAmount || newAmount <= 0) {
+    return res.status(400).json({ error: "Valid transaction data required" });
+  }
+
+  // ==========================================
+  // PAYMENT UPDATE
+  // ==========================================
+  if (type === "payment") {
+    db.query(
+      "SELECT customer_id, amount FROM payments WHERE id = ?",
+      [id],
+      (err, rows) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Payment fetch failed" });
+        }
+
+        if (!rows.length) {
+          return res.status(404).json({ error: "Payment not found" });
+        }
+
+        const payment = rows[0];
+        const oldAmount = Number(payment.amount || 0);
+        const diff = newAmount - oldAmount;
+
+        db.query(
+          "UPDATE payments SET amount = ? WHERE id = ?",
+          [newAmount, id],
+          (err2) => {
+            if (err2) {
+              console.error(err2);
+              return res.status(500).json({ error: "Payment update failed" });
+            }
+
+            db.query(
+              "UPDATE customers SET balance = balance - ? WHERE id = ?",
+              [diff, payment.customer_id],
+              (err3) => {
+                if (err3) {
+                  console.error(err3);
+                  return res.status(500).json({ error: "Balance update failed" });
+                }
+
+                return res.json({
+                  success: true,
+                  message: "Payment updated successfully"
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+
+    return;
+  }
+
+  // ==========================================
+  // SALE UPDATE
+  // ==========================================
+  if (type === "sale") {
+
+    const { items = [] } = req.body;
+
+    db.query(
+      "SELECT customer_id, total_amount FROM sales WHERE id = ?",
+      [id],
+      (err, rows) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Sale fetch failed" });
+        }
+
+        if (!rows.length) {
+          return res.status(404).json({ error: "Sale not found" });
+        }
+
+        const sale = rows[0];
+        const oldAmount = Number(sale.total_amount || 0);
+
+        if (!Array.isArray(items) || !items.length) {
+          return res.status(400).json({ error: "No invoice items provided" });
+        }
+
+        let completed = 0;
+        let newTotal = 0;
+
+        items.forEach((item) => {
+          const qty = Number(item.quantity || 0);
+          const discount = Number(item.discount || 0);
+          const price = Number(item.price || item.current_price || 0);
+
+          const discounted = price * (1 - discount / 100);
+          const finalTotal = discounted * qty;
+
+          newTotal += finalTotal;
+
+          db.query(
+            `UPDATE sale_items
+             SET
+               quantity = ?,
+               discount = ?,
+               final_price = ?
+             WHERE id = ?`,
+            [qty, discount, finalTotal, item.id],
+            (err2) => {
+              if (err2) {
+                console.error(err2);
+                return res.status(500).json({ error: "Sale item update failed" });
+              }
+
+              // 🔥 ALSO UPDATE CUSTOMER DISCOUNT TABLE
+              db.query(
+                `INSERT INTO customer_discounts (
+                  customer_id,
+                  book_id,
+                  discount
+                )
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                  discount = VALUES(discount)`,
+                [sale.customer_id, item.book_id, discount],
+                (discountErr) => {
+                  if (discountErr) {
+                    console.error("Customer discount update error:", discountErr);
+                  }
+
+                  completed++;
+
+                  if (completed === items.length) {
+                    const diff = newTotal - oldAmount;
+
+                    db.query(
+                      "UPDATE sales SET total_amount = ? WHERE id = ?",
+                      [newTotal, id],
+                      (err3) => {
+                        if (err3) {
+                          console.error(err3);
+                          return res.status(500).json({ error: "Sale total update failed" });
+                        }
+
+                        db.query(
+                          "UPDATE customers SET balance = balance + ? WHERE id = ?",
+                          [diff, sale.customer_id],
+                          (err4) => {
+                            if (err4) {
+                              console.error(err4);
+                              return res.status(500).json({ error: "Balance update failed" });
+                            }
+
+                            return res.json({
+                              success: true,
+                              message: "Invoice updated successfully",
+                              total: newTotal
+                            });
+                          }
+                        );
+                      }
+                    );
+                  }
+                }
+              );
+
+              return;
+            }
+          );
+        });
+      }
+    );
+
+    return;
+  }
+
+  // ==========================================
+  // RETURN UPDATE
+  // ==========================================
+  if (type === "return") {
+    db.query(
+      "SELECT customer_id, amount FROM customer_returns WHERE id = ?",
+      [id],
+      (err, rows) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Return fetch failed" });
+        }
+
+        if (!rows.length) {
+          return res.status(404).json({ error: "Return not found" });
+        }
+
+        const ret = rows[0];
+        const oldAmount = Number(ret.amount || 0);
+        const diff = newAmount - oldAmount;
+
+        db.query(
+          "UPDATE customer_returns SET amount = ? WHERE id = ?",
+          [newAmount, id],
+          (err2) => {
+            if (err2) {
+              console.error(err2);
+              return res.status(500).json({ error: "Return update failed" });
+            }
+
+            db.query(
+              "UPDATE customers SET balance = balance - ? WHERE id = ?",
+              [diff, ret.customer_id],
+              (err3) => {
+                if (err3) {
+                  console.error(err3);
+                  return res.status(500).json({ error: "Balance update failed" });
+                }
+
+                return res.json({
+                  success: true,
+                  message: "Return updated successfully"
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+
+    return;
+  }
+
+  return res.status(400).json({ error: "Unsupported transaction type" });
+};
+
 /* =========================
    💰 ADD PAYMENT
 ========================= */
@@ -420,40 +671,141 @@ res.setHeader("Content-Disposition", "attachment; filename=sales.csv");
 /* =========================
    📚 GET CUSTOMER PURCHASED BOOKS
 ========================= */
+// 🔥 REQUIRED MYSQL INDEXES FOR SCALE
+// CREATE INDEX idx_sales_customer ON sales(customer_id);
+// CREATE INDEX idx_sale_items_sale ON sale_items(sale_id);
+// CREATE INDEX idx_sale_items_book ON sale_items(book_id);
+// CREATE INDEX idx_books_title ON books(title);
+// CREATE INDEX idx_books_publisher ON books(publisher);
+// CREATE INDEX idx_sales_created ON sales(created_at);
+
 export const getCustomerSales = (req, res) => {
   const { id } = req.params;
 
-  const sql = `
-  SELECT 
-    MIN(si.id) AS id,
-    si.book_id,
-    b.title AS book_name,
-    b.publisher,
-    b.edition AS edition,
-    SUM(si.quantity) AS quantity,
-    SUM(COALESCE(si.returned_quantity, 0)) AS returned_quantity,
-    (SUM(si.quantity) - SUM(COALESCE(si.returned_quantity, 0))) AS remaining_quantity,
-    COALESCE(AVG(si.price), 0) AS price,
-    MAX(s.created_at) AS created_at,
-    COALESCE(cbd.discount, 0) AS discount_percentage
-  FROM sale_items si
-  JOIN sales s ON s.id = si.sale_id
-  LEFT JOIN books b ON si.book_id = b.id
-  LEFT JOIN customer_discounts cbd 
-    ON cbd.book_id = si.book_id 
-    AND cbd.customer_id = s.customer_id
-  WHERE s.customer_id = ?
-  GROUP BY si.book_id
-  ORDER BY created_at DESC
-`;
+  const page = Number(req.query.page) || 1;
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const search = (req.query.search || "").trim();
 
-  db.query(sql, [id], (err, result) => {
-    if (err) {
-      console.error("Customer Sales Fetch Error:", err);
-      return res.status(500).json({ error: "Failed to fetch customer sales" });
+  const offset = (page - 1) * limit;
+
+  let searchCondition = "";
+  let searchParams = [];
+
+  // 🔥 scalable SQL search
+  if (search) {
+    searchCondition = `
+      AND (
+        b.title LIKE ?
+        OR b.publisher LIKE ?
+        OR b.edition LIKE ?
+      )
+    `;
+
+    const like = `%${search}%`;
+    searchParams = [like, like, like];
+  }
+
+  // 🔥 paginated main query
+  const sql = `
+    SELECT 
+      MIN(si.id) AS id,
+      si.book_id,
+      b.title AS book_name,
+      b.publisher,
+      b.edition AS edition,
+
+      SUM(si.quantity) AS quantity,
+
+      SUM(COALESCE(si.returned_quantity, 0)) AS returned_quantity,
+
+      GREATEST(
+        SUM(si.quantity) - SUM(COALESCE(si.returned_quantity, 0)),
+        0
+      ) AS remaining_quantity,
+
+      COALESCE(AVG(si.price), 0) AS price,
+
+      MAX(s.created_at) AS created_at,
+
+      COALESCE(cbd.discount, 0) AS discount_percentage
+
+    FROM sale_items si
+
+    JOIN sales s
+      ON s.id = si.sale_id
+
+    LEFT JOIN books b
+      ON si.book_id = b.id
+
+    LEFT JOIN customer_discounts cbd 
+      ON cbd.book_id = si.book_id 
+      AND cbd.customer_id = s.customer_id
+
+    WHERE s.customer_id = ?
+    ${searchCondition}
+
+    GROUP BY si.book_id
+
+    ORDER BY MAX(s.created_at) DESC
+
+    LIMIT ? OFFSET ?
+  `;
+
+  // 🔥 count query for pagination
+  const countSql = `
+    SELECT COUNT(*) AS total
+    FROM (
+      SELECT si.book_id
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      LEFT JOIN books b ON si.book_id = b.id
+      WHERE s.customer_id = ?
+      ${searchCondition}
+      GROUP BY si.book_id
+    ) x
+  `;
+
+  const mainParams = [
+    id,
+    ...searchParams,
+    limit,
+    offset,
+  ];
+
+  const countParams = [
+    id,
+    ...searchParams,
+  ];
+
+  db.query(countSql, countParams, (countErr, countRows) => {
+    if (countErr) {
+      console.error("Customer Sales Count Error:", countErr);
+      return res.status(500).json({
+        error: "Failed to count customer sales",
+      });
     }
 
-    res.json(result);
+    const total = Number(countRows[0]?.total || 0);
+
+    db.query(sql, mainParams, (err, result) => {
+      if (err) {
+        console.error("Customer Sales Fetch Error:", err);
+        return res.status(500).json({
+          error: "Failed to fetch customer sales",
+        });
+      }
+
+      res.json({
+        data: result,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          hasMore: offset + result.length < total,
+        },
+      });
+    });
   });
 };
 

@@ -83,133 +83,257 @@ export const createSale = (req, res) => {
 
       const proceedWithSale = (finalCustomerId, isWalkIn) => {
 
+        // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
+        // timezone-safe + ignores seconds issues
+        const todaySaleSql = `
+          SELECT 
+            id,
+            total_amount,
+            paid_amount,
+            created_at
+          FROM sales
+          WHERE customer_id = ?
+          AND DATE(CONVERT_TZ(created_at, '+00:00', '+05:00')) =
+              DATE(CONVERT_TZ(NOW(), '+00:00', '+05:00'))
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+
         db.query(
-          "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
-          [finalCustomerId, total, paidValue],
-          (err, saleResult) => {
-            if (err) {
+          todaySaleSql,
+          [finalCustomerId],
+          (findErr, existingSales) => {
+            if (findErr) {
               return db.rollback(() =>
-                res.status(500).json({ error: "Sale failed" })
+                res.status(500).json({ error: "Sale lookup failed" })
               );
             }
 
-            const saleId = saleResult.insertId;
+            // ✅ EXISTING INVOICE FOUND
+            if (existingSales.length > 0) {
+              const existingSale = existingSales[0];
 
-            // 2️⃣ INSERT ITEMS
-            const values = items.map((i) => [
-              saleId,
-              Number(i.book_id),
-              Number(i.quantity),
-              Number(i.current_price || i.printed_price),
-              Number(i.discount) || 0,
-            ]);
+              const saleId = existingSale.id;
 
-            db.query(
-              "INSERT INTO sale_items (sale_id, book_id, quantity, price, discount) VALUES ?",
-              [values],
-              (err) => {
-                if (err) {
-                  return db.rollback(() =>
-                    res.status(500).json({ error: "Items failed" })
-                  );
+              
+              const updatedTotal =
+                Number(existingSale.total_amount || 0) + total;
+
+              const updatedPaid =
+                Number(existingSale.paid_amount || 0) + paidValue;
+
+              db.query(
+                `UPDATE sales
+                 SET
+                   total_amount = ?,
+                   paid_amount = ?
+                 WHERE id = ?`,
+                [updatedTotal, updatedPaid, saleId],
+                (updateErr) => {
+                  if (updateErr) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Sale update failed" })
+                    );
+                  }
+
+                  continueSaleProcess(saleId);
                 }
+              );
+            }
 
-                // 3️⃣ UPDATE STOCK
-                const updateStock = (index = 0) => {
-                  if (index === items.length) return updateBalance();
+            // ✅ CREATE NEW DAILY INVOICE
+            else {
+              console.log("🆕 Creating new daily invoice for customer:", finalCustomerId);
+              db.query(
+                "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
+                [finalCustomerId, total, paidValue],
+                (err, saleResult) => {
+                  if (err) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Sale failed" })
+                    );
+                  }
 
-                  const item = items[index];
+                  continueSaleProcess(saleResult.insertId);
+                }
+              );
+            }
+          }
+        );
+
+        function continueSaleProcess(saleId) {
+
+            // 2️⃣ INSERT OR MERGE ITEMS INTO SAME DAILY INVOICE
+            const saveItems = (index = 0) => {
+              if (index >= items.length) {
+                return updateStock();
+              }
+
+              const item = items[index];
+
+              const saleIdValue = Number(saleId);
+              const bookId = Number(item.book_id);
+              const qty = Number(item.quantity || 0);
+              const price = Number(item.current_price || item.printed_price || 0);
+              const discount = Number(item.discount || 0);
+
+              // 🔥 CHECK IF BOOK ALREADY EXISTS IN THIS SALE
+              db.query(
+                `SELECT id, quantity
+                 FROM sale_items
+                 WHERE sale_id = ?
+                 AND book_id = ?
+                 LIMIT 1`,
+                [saleIdValue, bookId],
+                (findErr, existingRows) => {
+                  if (findErr) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Item lookup failed" })
+                    );
+                  }
+
+                  // ✅ MERGE INTO EXISTING ROW
+                  if (existingRows.length > 0) {
+                    const existing = existingRows[0];
+
+                    const newQty =
+                      Number(existing.quantity || 0) + qty;
+
+                    db.query(
+                      `UPDATE sale_items
+                       SET
+                         quantity = ?,
+                         price = ?,
+                         discount = ?
+                       WHERE id = ?`,
+                      [newQty, price, discount, existing.id],
+                      (updateErr) => {
+                        if (updateErr) {
+                          return db.rollback(() =>
+                            res.status(500).json({ error: "Item merge failed" })
+                          );
+                        }
+
+                        saveItems(index + 1);
+                      }
+                    );
+                  }
+
+                  // ✅ INSERT NEW ITEM
+                  else {
+                    db.query(
+                      `INSERT INTO sale_items
+                       (sale_id, book_id, quantity, price, discount)
+                       VALUES (?, ?, ?, ?, ?)`,
+                      [saleIdValue, bookId, qty, price, discount],
+                      (insertErr) => {
+                        if (insertErr) {
+                          return db.rollback(() =>
+                            res.status(500).json({ error: "Item insert failed" })
+                          );
+                        }
+
+                        saveItems(index + 1);
+                      }
+                    );
+                  }
+                }
+              );
+            };
+
+            saveItems();
+
+            // 3️⃣ UPDATE STOCK
+            const updateStock = (index = 0) => {
+              if (index === items.length) return updateBalance();
+
+              const item = items[index];
+
+              db.query(
+                "UPDATE books SET stock = stock - ? WHERE id = ?",
+                [Number(item.quantity), Number(item.book_id)],
+                (err) => {
+                  if (err) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Stock failed" })
+                    );
+                  }
+
+                  updateStock(index + 1);
+                }
+              );
+            };
+
+            // 4️⃣ UPDATE CUSTOMER BALANCE (🔥 FIXED)
+            const updateBalance = () => {
+
+              // ✅ WALK-IN: DO NOT UPDATE BALANCE
+              if (isWalkIn) {
+                return db.commit((err) => {
+                  if (err) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Commit failed" })
+                    );
+                  }
+
+                  return res.json({
+                    message: "Sale completed",
+                    sale_id: saleId,
+                    total,
+                    paid: paidValue,
+                    remaining,
+                    newBalance: 0,
+                  });
+                });
+              }
+
+              // 🔽 NORMAL CUSTOMER FLOW
+              db.query(
+                "SELECT balance FROM customers WHERE id = ?",
+                [finalCustomerId],
+                (err, result) => {
+                  if (err) {
+                    return db.rollback(() =>
+                      res.status(500).json({ error: "Balance fetch failed" })
+                    );
+                  }
+
+                  const oldBalance = Number(result[0]?.balance) || 0;
+
+                  const newBalance = oldBalance + total - paidValue;
 
                   db.query(
-                    "UPDATE books SET stock = stock - ? WHERE id = ?",
-                    [Number(item.quantity), Number(item.book_id)],
+                    "UPDATE customers SET balance = ? WHERE id = ?",
+                    [newBalance, finalCustomerId],
                     (err) => {
                       if (err) {
                         return db.rollback(() =>
-                          res.status(500).json({ error: "Stock failed" })
+                          res.status(500).json({ error: "Balance update failed" })
                         );
                       }
 
-                      updateStock(index + 1);
-                    }
-                  );
-                };
-
-                // 4️⃣ UPDATE CUSTOMER BALANCE (🔥 FIXED)
-                const updateBalance = () => {
-
-                  // ✅ WALK-IN: DO NOT UPDATE BALANCE
-                  if (isWalkIn) {
-                    return db.commit((err) => {
-                      if (err) {
-                        return db.rollback(() =>
-                          res.status(500).json({ error: "Commit failed" })
-                        );
-                      }
-
-                      return res.json({
-                        message: "Sale completed",
-                        sale_id: saleId,
-                        total,
-                        paid: paidValue,
-                        remaining,
-                        newBalance: 0,
-                      });
-                    });
-                  }
-
-                  // 🔽 NORMAL CUSTOMER FLOW
-                  db.query(
-                    "SELECT balance FROM customers WHERE id = ?",
-                    [finalCustomerId],
-                    (err, result) => {
-                      if (err) {
-                        return db.rollback(() =>
-                          res.status(500).json({ error: "Balance fetch failed" })
-                        );
-                      }
-
-                      const oldBalance = Number(result[0]?.balance) || 0;
-
-                      const newBalance = oldBalance + total - paidValue;
-
-                      db.query(
-                        "UPDATE customers SET balance = ? WHERE id = ?",
-                        [newBalance, finalCustomerId],
-                        (err) => {
-                          if (err) {
-                            return db.rollback(() =>
-                              res.status(500).json({ error: "Balance update failed" })
-                            );
-                          }
-
-                          db.commit((err) => {
-                            if (err) {
-                              return db.rollback(() =>
-                                res.status(500).json({ error: "Commit failed" })
-                              );
-                            }
-
-                            res.json({
-                              message: "Sale completed",
-                              sale_id: saleId,
-                              total,
-                              paid: paidValue,
-                              remaining,
-                              newBalance,
-                            });
-                          });
+                      db.commit((err) => {
+                        if (err) {
+                          return db.rollback(() =>
+                            res.status(500).json({ error: "Commit failed" })
+                          );
                         }
-                      );
+
+                        res.json({
+                          message: "Sale completed",
+                          sale_id: saleId,
+                          total,
+                          paid: paidValue,
+                          remaining,
+                          newBalance,
+                        });
+                      });
                     }
                   );
-                };
-
-                updateStock();
-              }
-            );
-          }
-        );
+                }
+              );
+            };
+        }
       };
     });
   });
