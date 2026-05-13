@@ -46,32 +46,7 @@ function Sidebar() {
       </div>
 
       {/* SUMMARY CARD */}
-      <div className="p-4">
-        <div className="bg-[#1e293b] rounded-xl p-4 text-sm shadow">
-
-          <div className="mb-3 text-gray-400 text-xs">
-            Today's Summary
-          </div>
-
-          <div className="flex justify-between mb-2">
-            <span className="text-gray-300">Total Sales</span>
-            <span className="font-semibold">Rs. 24,500</span>
-          </div>
-
-          <div className="flex justify-between mb-2">
-            <span className="text-gray-300">Total Orders</span>
-            <span className="font-semibold">32</span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-gray-300">Profit</span>
-            <span className="font-semibold text-green-400">
-              Rs. 8,750
-            </span>
-          </div>
-
-        </div>
-      </div>
+      
 
     </div>
   );

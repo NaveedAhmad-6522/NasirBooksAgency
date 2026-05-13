@@ -9,7 +9,7 @@ export default function ReportsPage() {
 
   const handleUnlock = (password) => {
     // temporary password (we'll secure later)
-    if (password === "1234") {
+    if (password === "ASD1234") {
       setIsUnlocked(true);
       return true;
     }
