@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
+const API = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 import { useNavigate } from "react-router-dom";
 import SuppliersHeader from "../components/SuppliersHeader";
 import SuppliersStats from "../components/SuppliersStats";
@@ -46,7 +51,10 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
           setLoadingSearch(true);
 
           const res = await fetch(
-            `${API}/api/suppliers?search=${search}&limit=10`
+            `${API}/api/suppliers?search=${search}&limit=10`,
+            {
+              headers: authHeaders(),
+            }
           );
           const data = await res.json();
 
@@ -182,7 +190,9 @@ export default function Suppliers() {
     const [allSuppliers, setAllSuppliers] = useState([]);
     const fetchAllSuppliers = async () => {
       try {
-        const res = await fetch(`${API}/api/suppliers?limit=10000`);
+        const res = await fetch(`${API}/api/suppliers?limit=10000`, {
+          headers: authHeaders(),
+        });
         const data = await res.json();
         setAllSuppliers(data.data || data);
       } catch (err) {
@@ -222,7 +232,10 @@ export default function Suppliers() {
 
             const res = await fetch(
                 `${API}/api/suppliers?search=${search}&filter=${filter}&limit=${limit}&offset=${(page - 1) * limit}&_=${Date.now()}`,
-                { cache: "no-store" }
+                {
+                    cache: "no-store",
+                    headers: authHeaders(),
+                }
             );
 
             const data = await res.json();
@@ -248,7 +261,9 @@ export default function Suppliers() {
 
     const fetchStats = async () => {
         try {
-            const res = await fetch(`${API}/api/suppliers/stats`);
+            const res = await fetch(`${API}/api/suppliers/stats`, {
+              headers: authHeaders(),
+            });
             const data = await res.json();
             setStatsData(data);
         } catch (err) {
@@ -273,9 +288,7 @@ export default function Suppliers() {
         try {
             const res = await fetch(`${API}/api/suppliers`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: authHeaders(true),
                 body: JSON.stringify(formData),
             });
 
@@ -294,7 +307,10 @@ export default function Suppliers() {
         try {
             setExportLoading(true);
             const url = `${API}/api/suppliers/export?search=${search}&filter=${filter}`;
-            window.open(url, "_blank");
+            window.open(
+                `${url}&token=${localStorage.getItem("token")}`,
+                "_blank"
+            );
         } catch (err) {
             console.error("Export error:", err);
         } finally {
@@ -327,7 +343,7 @@ export default function Suppliers() {
 
             const res = await fetch(`${API}/api/suppliers/payment`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: authHeaders(true),
                 body: JSON.stringify(payload),
             });
 
@@ -351,7 +367,10 @@ export default function Suppliers() {
     // --- HANDLERS FOR EDIT, DELETE, TOGGLE STATUS ---
     const handleDelete = async (id) => {
         try {
-            const res = await fetch(`${API}/api/suppliers/${id}`, { method: "DELETE" });
+            const res = await fetch(`${API}/api/suppliers/${id}`, {
+                method: "DELETE",
+                headers: authHeaders(),
+            });
             const data = await res.json();
 
             if (!res.ok) {
@@ -371,6 +390,7 @@ export default function Suppliers() {
         try {
             const res = await fetch(`${API}/api/suppliers/${supplier.id}/status`, {
                 method: "PATCH",
+                headers: authHeaders(),
             });
 
             if (!res.ok) {
@@ -529,7 +549,7 @@ export default function Suppliers() {
                             if (editSupplier) {
                                 const res = await fetch(`${API}/api/suppliers/${editSupplier.id}`, {
                                     method: "PUT",
-                                    headers: { "Content-Type": "application/json" },
+                                    headers: authHeaders(true),
                                     body: JSON.stringify(formData),
                                 });
 

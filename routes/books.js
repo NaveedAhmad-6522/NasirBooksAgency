@@ -1,4 +1,5 @@
 import express from "express";
+import { verifyToken } from "../middleware/authMiddleware.js";
 import {
   getBooks,
   searchBooks,
@@ -11,12 +12,12 @@ import {
 } from "../controllers/booksController.js";
 const router = express.Router();
 
-router.get("/", getBooks);
-router.get("/:id", getBookById);
-router.post("/add", addBook);
-router.get("/search", searchBooks);
-router.put("/price/:id", updatePrice);
-router.put("/:id", updateBook);
-router.put("/toggle/:id", toggleBookStatus);
-router.post("/:id/restock", restockBook);
+router.get("/", verifyToken, getBooks);
+router.get("/:id", verifyToken, getBookById);
+router.post("/add", verifyToken, addBook);
+router.get("/search", verifyToken, searchBooks);
+router.put("/price/:id", verifyToken, updatePrice);
+router.put("/:id", verifyToken, updateBook);
+router.put("/toggle/:id", verifyToken, toggleBookStatus);
+router.post("/:id/restock", verifyToken, restockBook);
 export default router;

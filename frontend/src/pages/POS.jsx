@@ -13,7 +13,12 @@ import Filters from "../components/Filters";
 import Cart from "../components/Cart";
 import CustomerModal from "../components/CustomerModal";
 
+const API_BASE = import.meta.env.VITE_API_URL;
 
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 
 function POS() {
   const [books, setBooks] = useState([]);
@@ -125,7 +130,10 @@ function POS() {
 
         // 🔥 backend search (title + publisher)
         const res = await fetch(
-          `http://localhost:5001/api/books?search=${value}&limit=20`
+          `${API_BASE}/api/books?search=${value}&limit=20`,
+          {
+            headers: authHeaders(),
+          }
         );
 
         const data = await res.json();
@@ -158,7 +166,10 @@ function POS() {
 
       try {
         const res = await fetch(
-          `http://localhost:5001/api/customers?q=${value}`
+          `${API_BASE}/api/customers?q=${value}`,
+          {
+            headers: authHeaders(),
+          }
         );
 
         const data = await res.json();

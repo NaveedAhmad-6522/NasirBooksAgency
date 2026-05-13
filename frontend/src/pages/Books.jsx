@@ -5,6 +5,13 @@ import Sidebar from "../components/Sidebar";
 import Footer from "../components/Footer";
 import AddBook from "../components/AddBook";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 function Books() {
   const [search, setSearch] = useState("");
   const [books, setBooks] = useState([]);
@@ -56,7 +63,10 @@ const [restockData, setRestockData] = useState({
       setLoading(true);
 
       const res = await fetch(
-        `http://localhost:5001/api/books?status=${filterStatus}&page=${currentPage}&limit=${itemsPerPage}&search=${search}`
+        `${API_BASE}/api/books?status=${filterStatus}&page=${currentPage}&limit=${itemsPerPage}&search=${search}`,
+        {
+          headers: authHeaders(),
+        }
       );
 
       const data = await res.json();
@@ -94,8 +104,9 @@ const [restockData, setRestockData] = useState({
 
   const handleToggleStatus = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5001/api/books/toggle/${id}`, {
+      const res = await fetch(`${API_BASE}/api/books/toggle/${id}`, {
         method: "PUT",
+        headers: authHeaders(),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -147,10 +158,10 @@ const [restockData, setRestockData] = useState({
   const submitRestock = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5001/api/books/${restockBook.id}/restock`,
+        `${API_BASE}/api/books/${restockBook.id}/restock`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify(restockData),
         }
       );

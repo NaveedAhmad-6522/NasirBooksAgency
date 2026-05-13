@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 function AddBook({ existingBook, onSuccess, onCancel }) {
   const [book, setBook] = useState({
     title: existingBook?.title || "",
@@ -41,8 +48,11 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
         controllerRef.current = controller;
 
         const res = await fetch(
-          `http://localhost:5001/api/suppliers?search=${supplierSearch}&filter=active&limit=10`,
-          { signal: controller.signal }
+          `${API_BASE}/api/suppliers?search=${supplierSearch}&filter=active&limit=10`,
+          {
+            signal: controller.signal,
+            headers: authHeaders(),
+          }
         );
 
         const data = await res.json();
@@ -111,8 +121,8 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
       }
 
       const url = existingBook
-        ? `http://localhost:5001/api/books/${existingBook.id}`
-        : "http://localhost:5001/api/books/add";
+        ? `${API_BASE}/api/books/${existingBook.id}`
+        : `${API_BASE}/api/books/add`;
 
       const method = existingBook ? "PUT" : "POST";
 
@@ -130,7 +140,7 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify(payload),
       });
 

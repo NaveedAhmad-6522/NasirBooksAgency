@@ -1,10 +1,11 @@
 import express from "express";
 import db from "../config/db.js";
+import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // 🔥 GET DISCOUNT
-router.get("/", (req, res) => {
+router.get("/", verifyToken, (req, res) => {
   const { customer_id, book_id } = req.query;
 
   db.query(

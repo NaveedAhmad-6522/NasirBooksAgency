@@ -11,18 +11,19 @@ import {
   getCustomerReturnsDetails,
   getSupplierReturnsDetails
 } from "../controllers/reportcontroller.js";
+import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/dashboard", getDashboardReport);
-router.get("/sales-details", getSalesDetails);
-router.get("/payments-details", getPaymentsDetails);      
-router.get("/receivable-details", getReceivableDetails);  
-router.get("/payable-details", getPayableDetails);
-router.get("/inventory-details", getInventoryDetails);
-router.get("/lowstock-details", getLowStockDetails);
+router.get("/dashboard", verifyToken, getDashboardReport);
+router.get("/sales-details", verifyToken, getSalesDetails);
+router.get("/payments-details", verifyToken, getPaymentsDetails);      
+router.get("/receivable-details", verifyToken, getReceivableDetails);  
+router.get("/payable-details", verifyToken, getPayableDetails);
+router.get("/inventory-details", verifyToken, getInventoryDetails);
+router.get("/lowstock-details", verifyToken, getLowStockDetails);
 
-router.get("/profit-details", getProfitDetails);
-router.get("/customer-returns-details", getCustomerReturnsDetails);
-router.get("/supplier-returns-details", getSupplierReturnsDetails);
+router.get("/profit-details", verifyToken, getProfitDetails);
+router.get("/customer-returns-details", verifyToken, getCustomerReturnsDetails);
+router.get("/supplier-returns-details", verifyToken, getSupplierReturnsDetails);
 export default router;

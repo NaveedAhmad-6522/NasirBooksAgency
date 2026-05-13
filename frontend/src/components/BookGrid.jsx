@@ -1,3 +1,11 @@
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+// 🔐 Shared API/Auth helpers
 function BookGrid({ books = [], category, addToCart }) {
 
   const filteredBooks = books.filter((b) => {

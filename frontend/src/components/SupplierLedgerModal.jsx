@@ -1,6 +1,14 @@
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import SupplierReturn from "./SupplierReturn";
+
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 
 export default function SupplierLedgerPage() {
   const { id } = useParams();
@@ -35,7 +43,10 @@ export default function SupplierLedgerPage() {
   const fetchInitial = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5001/api/suppliers/${id}/ledger`
+        `${API_BASE}/api/suppliers/${id}/ledger`,
+        {
+          headers: authHeaders(),
+        }
       );
       const result = await res.json();
       if (initialAbortRef.current) return;
@@ -49,7 +60,10 @@ export default function SupplierLedgerPage() {
   const fetchLedger = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5001/api/suppliers/${id}/ledger`
+        `${API_BASE}/api/suppliers/${id}/ledger`,
+        {
+          headers: authHeaders(),
+        }
       );
       const result = await res.json();
 
@@ -67,9 +81,12 @@ export default function SupplierLedgerPage() {
 
     try {
       const res = await fetch(
-        `http://localhost:5001/api/suppliers/${id}/ledger?cursor=${encodeURIComponent(
+        `${API_BASE}/api/suppliers/${id}/ledger?cursor=${encodeURIComponent(
           data.nextCursor
-        )}`
+        )}`,
+        {
+          headers: authHeaders(),
+        }
       );
       const result = await res.json();
 
@@ -127,12 +144,12 @@ export default function SupplierLedgerPage() {
       date = reference.replace("INV-", "");
     } else if (reference.startsWith("PAY-")) {
       const paymentId = reference.replace("PAY-", "");
-      url = `http://localhost:5001/api/suppliers/payment/${paymentId}`;
+      url = `${API_BASE}/api/suppliers/payment/${paymentId}`;
     }
 
     if (!url) {
       const encodedDate = encodeURIComponent(date);
-      url = `http://localhost:5001/api/suppliers/${id}/invoice/${encodedDate}?type=${finalType}`;
+      url = `${API_BASE}/api/suppliers/${id}/invoice/${encodedDate}?type=${finalType}`;
     }
 
     // 🔥 HARD DEBUG (do not remove)
@@ -144,7 +161,9 @@ export default function SupplierLedgerPage() {
     });
 
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: authHeaders(),
+      });
 
       if (!res.ok) {
         const errText = await res.text();
@@ -471,9 +490,9 @@ export default function SupplierLedgerPage() {
                   alert("Enter a valid amount");
                   return;
                 }
-                const res = await fetch("http://localhost:5001/api/suppliers/payment", {
+                const res = await fetch(`${API_BASE}/api/suppliers/payment`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: authHeaders(true),
                   body: JSON.stringify({
                     supplier_id: id,
                     amount: amount, // allow negative or positive
@@ -569,7 +588,27 @@ export default function SupplierLedgerPage() {
                 {(invoiceData.items || []).map((item, i) => (
                   <tr key={i} className="border-t print:break-inside-avoid">
                     <td className="px-3 py-2">{i+1}</td>
-                    <td className="px-3 py-2">{item.book_name}</td>
+                    <td className="px-3 py-2">
+  <div className="font-medium text-gray-900">
+    {item.book_name}
+  </div>
+
+  {(item.publisher || item.publisher_name || item.edition) && (
+    <div className="text-xs text-gray-500 mt-0.5">
+      {(item.publisher || item.publisher_name)
+        ? (item.publisher || item.publisher_name)
+        : ""}
+
+      {(item.publisher || item.publisher_name) && item.edition
+        ? " • "
+        : ""}
+
+      {item.edition
+        ? `Edition: ${item.edition}`
+        : ""}
+    </div>
+  )}
+</td>
                     <td className="px-3 py-2 text-right">{item.quantity}</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(item.purchase_price)}</td>
                     <td className="px-3 py-2 text-right">{formatCurrency(item.printed_price || 0)}</td>

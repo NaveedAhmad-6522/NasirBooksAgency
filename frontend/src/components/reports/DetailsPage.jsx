@@ -1,8 +1,16 @@
-  const handleClose = () => {
-    window.close();
-  };
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+const handleClose = () => {
+    window.close();
+  };
 
 export default function DetailsPage() {
   const [params] = useSearchParams();
@@ -23,7 +31,10 @@ export default function DetailsPage() {
       if (type === "receivable") endpoint = "receivable-details";
 
       const res = await fetch(
-        `http://localhost:5001/api/reports/${endpoint}?filter=${filter}&date=${date}`
+        `${API_BASE}/api/reports/${endpoint}?filter=${filter}&date=${date}`,
+        {
+          headers: authHeaders(),
+        }
       );
 
       const result = await res.json();

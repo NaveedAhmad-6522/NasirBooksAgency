@@ -1,4 +1,5 @@
 import { useState } from "react";
+const API_BASE = import.meta.env.VITE_API_URL;
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -13,7 +14,7 @@ export default function Login() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:5001/api/login", {
+      const res = await fetch(`${API_BASE}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 export default function SupplierReturn({ supplier, supplier_id, onClose, onSuccess }) {
   const [books, setBooks] = useState([]);
   const [search, setSearch] = useState("");
@@ -11,7 +18,9 @@ export default function SupplierReturn({ supplier, supplier_id, onClose, onSucce
   useEffect(() => {
     if (!supplier_id) return;
 
-    fetch(`http://localhost:5001/api/suppliers/${supplier_id}/books`)
+    fetch(`${API_BASE}/api/suppliers/${supplier_id}/books`, {
+      headers: authHeaders(),
+    })
       .then(res => res.json())
       .then(data => setBooks(data.data || data))
       .catch(err => console.error("Supplier books fetch error", err));
@@ -39,9 +48,9 @@ export default function SupplierReturn({ supplier, supplier_id, onClose, onSucce
       return;
     }
 
-    const res = await fetch("http://localhost:5001/api/suppliers/return", {
+    const res = await fetch(`${API_BASE}/api/suppliers/return`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(true),
       body: JSON.stringify({
         supplier_id,
         book_id: selectedBook.id,

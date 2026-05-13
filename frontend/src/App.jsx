@@ -48,11 +48,12 @@ const ProtectedRoute = ({ children }) => {
 function Layout() {
   const location = useLocation();
   const isLoginPage = location.pathname === "/login";
+  const isInvoicePage = location.pathname.startsWith("/sales/");
 
   return (
     <div className="flex">
-      {!isLoginPage && <Sidebar />}
-      <div className={`${!isLoginPage ? "ml-44" : ""} w-full min-h-screen bg-gray-50`}>
+      {!isLoginPage && !isInvoicePage && <Sidebar />}
+      <div className={`${!isLoginPage && !isInvoicePage ? "ml-44" : ""} w-full min-h-screen bg-gray-50`}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

@@ -1,9 +1,14 @@
+const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 export const createCustomer = async (data) => {
-    const res = await fetch("http://localhost:5001/api/customers", {
+    const res = await fetch(`${API_BASE}/customers`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: authHeaders(true),
       body: JSON.stringify({
         name: data.name,
         phone: data.phone,
@@ -14,4 +19,3 @@ export const createCustomer = async (data) => {
   
     return res.json();
   };
-  

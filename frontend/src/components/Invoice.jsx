@@ -1,5 +1,13 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Printer, MessageCircle } from "lucide-react";
+
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 
 const style = document.createElement("style");
 style.innerHTML = `
@@ -34,7 +42,9 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
     if (mode === "pos") return; // skip API in POS
     if (!id || id === "undefined") return; // prevent undefined
 
-    fetch(`http://localhost:5001/api/sales/${id}`)
+    fetch(`${API_BASE}/api/sales/${id}`, {
+      headers: authHeaders(),
+    })
       .then((res) => res.json())
       .then(res => {
         console.log("SALE DATA:", res);
@@ -46,7 +56,9 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   useEffect(() => {
     if (!data?.sale?.customer_id) return;
 
-    fetch(`http://localhost:5001/api/customers/${data.sale.customer_id}`)
+    fetch(`${API_BASE}/api/customers/${data.sale.customer_id}`, {
+      headers: authHeaders(),
+    })
       .then(res => res.json())
       .then(setCustomerInfo)
       .catch(() => {});
@@ -54,7 +66,9 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
 
   useEffect(() => {
     // fetch minimal books list once (or when id changes)
-    fetch(`http://localhost:5001/api/books?fields=id,title,publisher,edition`)
+    fetch(`${API_BASE}/api/books?fields=id,title,publisher,edition`, {
+      headers: authHeaders(),
+    })
       .then(res => res.json())
       .then(list => {
         const map = {};
@@ -121,33 +135,42 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         {/* HEADER */}
         <div className="flex justify-between items-start border-b pb-5">
           <div>
-            <h1 className="text-3xl font-bold tracking-wide text-gray-900">NASIR BOOK AGENCY</h1>
-            <div className="text-sm text-gray-500 mt-1">Sales Invoice</div>
+            <h1 className="text-2xl font-bold tracking-wide text-gray-900">NASIR BOOK AGENCY</h1>
+            <div className="text-xs text-gray-500 mt-1">Sales Invoice</div>
             <div className="text-xs text-gray-600 mt-2 leading-relaxed space-y-1">
               <div>Dhakki Nalbandi, Qissa Khwani Bazar Peshawar</div>
               <div className="flex items-center gap-2">
                 <span>📞</span>
                 <span>091-2572277</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>💬</span>
-                <span>0302-8884377</span>
-                
+              <div className="flex items-center gap-2 text-green-600">
+                <MessageCircle size={14} />
+                <span className="text-gray-700">0302-8884377</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>💬</span>
-                <span>0311-3888849</span>
-                
+              <div className="flex items-center gap-2 text-green-600">
+                <MessageCircle size={14} />
+                <span className="text-gray-700">0311-3888849</span>
               </div>
             </div>
           </div>
 
-          <div className="text-right text-sm">
-            <div className="font-semibold text-lg">
-              Invoice #{sale?.id || "N/A"}
-            </div>
-            <div className="text-gray-500 mt-1">
-              {sale.created_at ? new Date(sale.created_at).toLocaleDateString() : ""}
+          <div className="text-right text-sm flex flex-col items-end gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-medium transition print:hidden"
+            >
+              <Printer size={14} />
+              Print
+            </button>
+
+            <div>
+              <div className="font-semibold text-base">
+                Invoice #{sale?.id || "N/A"}
+              </div>
+
+              <div className="text-gray-500 mt-1 text-xs">
+                {sale.created_at ? new Date(sale.created_at).toLocaleDateString() : ""}
+              </div>
             </div>
           </div>
         </div>

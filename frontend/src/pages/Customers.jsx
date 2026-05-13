@@ -37,7 +37,12 @@ function Customers() {
   const [selectedSale, setSelectedSale] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
+  const API = import.meta.env.VITE_API_URL;
+
+  const authHeaders = () => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  });
 
   const limit = 6;
 
@@ -63,7 +68,10 @@ function Customers() {
       setLoading(true);
 
       const res = await fetch(
-        `${API}/api/customers?q=${debouncedSearch}&page=${page}&limit=${limit}&filter=${filter}`
+        `${API}/api/customers?q=${debouncedSearch}&page=${page}&limit=${limit}&filter=${filter}`,
+        {
+          headers: authHeaders(),
+        }
       );
 
       const data = await res.json();
@@ -83,7 +91,9 @@ function Customers() {
   ========================= */
   const loadStats = async () => {
     try {
-      const res = await fetch(`${API}/api/customers/stats`);
+      const res = await fetch(`${API}/api/customers/stats`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
       setStats(data);
     } catch (err) {
@@ -109,11 +119,9 @@ function Customers() {
   ========================= */
   const handleAddCustomer = async () => {
     try {
-      await fetch("http://localhost:5001/api/customers", {
+      await fetch(`${API}/api/customers`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         body: JSON.stringify({
           ...newCustomer,
           balance: Number(newCustomer.balance) || 0
@@ -146,7 +154,9 @@ function Customers() {
   };
   const handleViewSale = async (saleId) => {
     try {
-      const res = await fetch(`http://localhost:5001/api/sales/${saleId}`);
+      const res = await fetch(`${API}/api/sales/${saleId}`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
 
       setSelectedSale(data);
@@ -160,11 +170,9 @@ function Customers() {
   ========================= */
   const handleSavePayment = async ({ customer_id, amount }) => {
     try {
-      await fetch("http://localhost:5001/api/customers/payment", {
+      await fetch(`${API}/api/customers/payment`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(),
         body: JSON.stringify({ customer_id, amount }),
       });
 
@@ -209,7 +217,10 @@ function Customers() {
 
   const handleExport = () => {
     const url = `${API}/api/customers/export?search=${search}&filter=${filter}`;
-    window.open(url, "_blank");
+    window.open(
+      `${url}&token=${localStorage.getItem("token")}`,
+      "_blank"
+    );
   };
 
   return (

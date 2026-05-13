@@ -27,7 +27,12 @@ function Dashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
+  const API = import.meta.env.VITE_API_URL;
+
+  const authHeaders = (json = false) => ({
+    ...(json ? { "Content-Type": "application/json" } : {}),
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  });
 const cacheRef = useRef({});
 useEffect(() => {
   setLowStockData([]);
@@ -37,7 +42,9 @@ useEffect(() => {
   if (cacheRef.current[filter]) {
     setData(cacheRef.current[filter]);
     // Still need to fetch low stock from dedicated endpoint
-    fetch(`${API}/api/dashboard/low-stock?limit=10&offset=0`)
+    fetch(`${API}/api/dashboard/low-stock?limit=10&offset=0`, {
+      headers: authHeaders(),
+    })
       .then(async r => {
         if (!r.ok) {
           const text = await r.text();
@@ -52,20 +59,28 @@ useEffect(() => {
     return;
   }
 
-  fetch(`${API}/api/dashboard?filter=${filter}`)
-    .then(async (res) => {
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text);
-      }
+  fetch(`${API}/api/dashboard?filter=${filter}`, {
+    headers: authHeaders(),
+  })    .then(async (res) => {
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+      return;
+    }
+    
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text);
+    }
       return res.json();
     })
     .then(res => {
       setData(res);
       cacheRef.current[filter] = res;
       // initial low stock fetch
-      fetch(`${API}/api/dashboard/low-stock?limit=10&offset=0`)
-        .then(async r => {
+      fetch(`${API}/api/dashboard/low-stock?limit=10&offset=0`, {
+        headers: authHeaders(),
+      })        .then(async r => {
           if (!r.ok) {
             const text = await r.text();
             throw new Error(text);
@@ -179,7 +194,10 @@ const maxPoint = Math.max(...normalizedData.map(d => d.total || 0));
 
       try {
         const res = await fetch(
-          `${API}/api/dashboard/low-stock?limit=10&offset=${lowStockOffset}`
+          `${API}/api/dashboard/low-stock?limit=10&offset=${lowStockOffset}`,
+          {
+            headers: authHeaders(),
+          }
         );
         const newData = await res.json();
         if (!newData.data || newData.data.length === 0) {

@@ -10,6 +10,12 @@ import {
   Scale,
   Pencil
 } from "lucide-react";
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 
 // 🔥 Smart scalable amount formatter
 const formatCompactAmount = (value) => {
@@ -237,7 +243,9 @@ function CustomerLedgerPage({ onViewSale }) {
   // Fetch ledger utility for refresh
   const fetchLedger = () => {
     if (!id) return;
-    fetch(`http://localhost:5001/api/customers/${id}/ledger?page=${page}&limit=${limit}`)
+    fetch(`${API_BASE}/api/customers/${id}/ledger?page=${page}&limit=${limit}`, {
+      headers: authHeaders(),
+    })
       .then(res => res.json())
       .then(setData)
       .catch(err => console.error("Ledger fetch error:", err));
@@ -248,7 +256,9 @@ function CustomerLedgerPage({ onViewSale }) {
   }, [id, page]);
 
   React.useEffect(() => {
-    fetch("http://localhost:5001/api/books")
+    fetch(`${API_BASE}/api/books`, {
+      headers: authHeaders(),
+    })
       .then((res) => res.json())
       .then((list) => {
         const map = {};
@@ -691,8 +701,10 @@ function CustomerLedgerPage({ onViewSale }) {
 
                                   // Fetch REAL invoice details from backend
                                   if (l.type === "sale") {
-                                    const res = await fetch(`http://localhost:5001/api/sales/${l.id}`);
 
+                                    const res = await fetch(`${API_BASE}/api/sales/${l.id}`, {
+                                      headers: authHeaders(),
+                                    });
                                     if (!res.ok) {
                                       throw new Error("Failed to fetch invoice details");
                                     }
@@ -826,10 +838,9 @@ function CustomerLedgerPage({ onViewSale }) {
                   const amount = document.getElementById("paymentAmount").value;
 
                   if (!amount) return alert("Enter amount");
-
-                  await fetch("http://localhost:5001/api/customers/payment", {
+                  await fetch(`${API_BASE}/api/customers/payment`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: authHeaders(),
                     body: JSON.stringify({
                       customer_id: id,
                       amount: Number(amount),
@@ -1043,12 +1054,10 @@ function CustomerLedgerPage({ onViewSale }) {
                     try {
                       setSavingEdit(true);
                       const res = await fetch(
-                        `http://localhost:5001/api/customers/${id}/ledger/${editingTransaction.id}`,
+                        `${API_BASE}/api/customers/${id}/ledger/${editingTransaction.id}`,
                         {
                           method: "PUT",
-                          headers: {
-                            "Content-Type": "application/json",
-                          },
+                          headers: authHeaders(),
                           body: JSON.stringify({
                             type: editingTransaction.type,
                             amount: Number(editAmount),

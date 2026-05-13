@@ -7,6 +7,13 @@ import SalesHeader from "../components/SalesHeader";
 import SalesStats from "../components/SalesStats";
 import Footer from "../components/Footer";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 function Sales() {
   const [sales, setSales] = useState([]);
   const [filteredSales, setFilteredSales] = useState([]);
@@ -24,7 +31,10 @@ function Sales() {
       setError("");
 
       const res = await fetch(
-        `http://localhost:5001/api/sales?search=${search}&filter=${filter}&limit=20`
+        `${API_BASE}/api/sales?search=${search}&filter=${filter}&limit=20`,
+        {
+          headers: authHeaders(),
+        }
       );
 
       const data = await res.json();
@@ -47,7 +57,9 @@ function Sales() {
   // 🔥 FETCH FULL SALE
   const handleView = async (sale) => {
     try {
-      const res = await fetch(`http://localhost:5001/api/sales/${sale.id}`);
+      const res = await fetch(`${API_BASE}/api/sales/${sale.id}`, {
+        headers: authHeaders(),
+      });
       const data = await res.json();
       setSelectedSale(data);
     } catch (err) {

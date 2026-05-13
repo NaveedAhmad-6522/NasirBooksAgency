@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { Search, User } from "lucide-react";
+const API_BASE = import.meta.env.VITE_API_URL;
 
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 function PaymentModal({ show, onClose, onSave }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -16,7 +21,10 @@ function PaymentModal({ show, onClose, onSave }) {
     const fetchCustomers = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5001/api/customers?q=${query}`
+          `${API_BASE}/api/customers?q=${query}`,
+          {
+            headers: authHeaders(),
+          }
         );
         const data = await res.json();
         setResults(Array.isArray(data) ? data : data.data || []);

@@ -7,6 +7,13 @@ import PaymentChart from "./PaymentChart";
 import SummaryPanel from "./SummaryPanel";
 import { Package, ArrowDown, ArrowUp, Wallet, TrendingUp, AlertTriangle, BookOpen, Layers, CreditCard, Users } from "lucide-react";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = (json = false) => ({
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 export default function ReportsDashboard({ onLogout }) {
   const getPKDate = () => {
     const now = new Date();
@@ -46,7 +53,12 @@ export default function ReportsDashboard({ onLogout }) {
         return;
       }
 
-      const res = await fetch(`http://localhost:5001/api/reports/${endpoint}?filter=${filter}&date=${date}`);
+      const res = await fetch(
+        `${API_BASE}/api/reports/${endpoint}?filter=${filter}&date=${date}`,
+        {
+          headers: authHeaders(),
+        }
+      );
       const data = await res.json();
 
       if (!data || data.length === 0) {
@@ -178,7 +190,12 @@ export default function ReportsDashboard({ onLogout }) {
     try {
       setLoading(true);
 
-      const res = await fetch(`http://localhost:5001/api/reports/dashboard?filter=${filter}&date=${date}`);
+      const res = await fetch(
+        `${API_BASE}/api/reports/dashboard?filter=${filter}&date=${date}`,
+        {
+          headers: authHeaders(),
+        }
+      );
       const data = await res.json();
 
       setReportData(data);

@@ -11,39 +11,40 @@ import {
   getCustomerById,
   updateLedgerTransaction
 } from "../controllers/customersController.js";
+import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // 🔍 SEARCH + PAGINATION
-router.get("/", searchCustomers);
+router.get("/", verifyToken, searchCustomers);
 
 // ➕ CREATE CUSTOMER
-router.post("/", createCustomer);
+router.post("/", verifyToken, createCustomer);
 
 // 💰 ADD PAYMENT
-router.post("/payment", addPayment);
+router.post("/payment", verifyToken, addPayment);
 
 // 📊 CUSTOMER LEDGER
-router.get("/:id/ledger", getCustomerLedger);
+router.get("/:id/ledger", verifyToken, getCustomerLedger);
 
 // 📈 STATS
-router.get("/stats", getCustomerStats);
+router.get("/stats", verifyToken, getCustomerStats);
 //export
-router.get("/export", exportCustomers);
+router.get("/export", verifyToken, exportCustomers);
 
 /* =========================
    📚 CUSTOMER SALES (FOR RETURN)
 ========================= */
-router.get("/:id/sales", getCustomerSales);
-router.get("/:id", getCustomerById);
+router.get("/:id/sales", verifyToken, getCustomerSales);
+router.get("/:id", verifyToken, getCustomerById);
 /* =========================
    🔁 CUSTOMER RETURN
 ========================= */
-router.post("/return", addCustomerReturn);
+router.post("/return", verifyToken, addCustomerReturn);
 
 /* =========================
    ✏️ UPDATE LEDGER TRANSACTION
 ========================= */
-router.put("/:customerId/ledger/:id", updateLedgerTransaction);
+router.put("/:customerId/ledger/:id", verifyToken, updateLedgerTransaction);
 
 export default router;

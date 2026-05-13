@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
 export default function CustomerReturn() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -39,7 +46,9 @@ export default function CustomerReturn() {
   }, [id, page, debouncedSearch]);
   const fetchCustomer = async () => {
     try {
-      const res = await fetch(`http://localhost:5001/api/customers/${id}`);
+      const res = await fetch(`${API_BASE}/api/customers/${id}`, {
+        headers: authHeaders(),
+      });
 
       // 🔥 handle 404 or non-JSON response
       if (!res.ok) {
@@ -67,7 +76,10 @@ export default function CustomerReturn() {
       });
 
       const res = await fetch(
-        `http://localhost:5001/api/customers/${id}/sales?${params}`
+        `${API_BASE}/api/customers/${id}/sales?${params}`,
+        {
+          headers: authHeaders(),
+        }
       );
 
       const data = await res.json();
@@ -120,10 +132,10 @@ export default function CustomerReturn() {
 
     try {
       const res = await fetch(
-        "http://localhost:5001/api/customers/return",
+        `${API_BASE}/api/customers/return`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             customer_id: id,
             items,

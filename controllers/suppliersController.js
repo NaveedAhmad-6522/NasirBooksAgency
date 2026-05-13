@@ -562,12 +562,14 @@ export const getSupplierInvoiceDetails = (req, res) => {
   console.log("Invoice Fetch Params:", { id, date, type });
 
   const sql = `
-    SELECT 
-      COALESCE(b.title, 'Unknown Book') AS book_name,
-      p.quantity,
-      ROUND(p.purchase_price, 2) AS purchase_price,
-      ROUND(COALESCE(p.printed_price, b.printed_price), 2) AS printed_price,
-      p.discount AS percentage,
+ SELECT 
+  COALESCE(b.title, 'Unknown Book') AS book_name,
+  b.publisher,
+  b.edition,
+  p.quantity,
+  ROUND(p.purchase_price, 2) AS purchase_price,
+  ROUND(COALESCE(p.printed_price, b.printed_price), 2) AS printed_price,
+  p.discount AS percentage,
       ROUND(
         (CASE WHEN p.type = 'return' THEN -1 ELSE 1 END) * (p.quantity * p.purchase_price),
         2
