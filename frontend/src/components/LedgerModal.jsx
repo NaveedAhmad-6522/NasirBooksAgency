@@ -835,21 +835,33 @@ function CustomerLedgerPage({ onViewSale }) {
 
               <button
                 onClick={async () => {
-                  const amount = document.getElementById("paymentAmount").value;
+                  try {
+                    const amount = document.getElementById("paymentAmount").value;
+                    if (!Number(amount) || Number(amount) <= 0) {
+                      return alert("Please enter a valid payment amount");
+                    }
+                    const res = await fetch(`${API_BASE}/api/customers/payment`, {
+                      method: "POST",
+                      headers: authHeaders(true),
+                      body: JSON.stringify({
+                        customer_id: Number(id),
+                        amount: Number(amount),
+                        payment_method: "cash"
+                      })
+                    });
 
-                  if (!amount) return alert("Enter amount");
-                  await fetch(`${API_BASE}/api/customers/payment`, {
-                    method: "POST",
-                    headers: authHeaders(),
-                    body: JSON.stringify({
-                      customer_id: id,
-                      amount: Number(amount),
-                      payment_method: "cash"
-                    })
-                  });
+                    const result = await res.json().catch(() => ({}));
 
-                  setShowPaymentModal(false);
-                  fetchLedger();
+                    if (!res.ok) {
+                      throw new Error(result.error || "Payment failed");
+                    }
+                    alert("Payment added successfully");
+                    setShowPaymentModal(false);
+                    fetchLedger();
+                  } catch (err) {
+                    console.error(err);
+                    alert(err.message || "Payment failed");
+                  }
                 }}
                 className="px-3 py-1 bg-blue-600 text-white rounded"
               >
@@ -945,6 +957,9 @@ function CustomerLedgerPage({ onViewSale }) {
 
                         // BEGIN booksMap logic
                         const meta = booksMap[item.book_id] || {};
+                        const availableStock = Number(meta.stock || 0);
+                        const originalQty = Number(item.original_quantity || item.quantity || 0);
+                        const maxAllowed = availableStock + originalQty;
 
                         const name =
                           item.book_name ||
@@ -964,10 +979,14 @@ function CustomerLedgerPage({ onViewSale }) {
                         // END booksMap logic
 
                         return (
-                          <tr
-                            key={index}
-                            className="border-b border-gray-100 hover:bg-gray-50 transition-all duration-200"
-                          >
+                            <tr
+                              key={index}
+                              className={`border-b border-gray-100 transition-all duration-200 ${
+                                item._delete
+                                  ? "bg-red-50 opacity-70"
+                                  : "hover:bg-gray-50"
+                              }`}
+                            >
                             <td className="px-4 py-3 text-gray-700 font-medium align-top">
                               {index + 1}
                             </td>
@@ -986,10 +1005,26 @@ function CustomerLedgerPage({ onViewSale }) {
                             <td className="px-4 py-3 align-top">
                               <input
                                 type="number"
+                                min="0"
+                                max={maxAllowed}
                                 value={item.quantity}
                                 onChange={(e) => {
                                   const updated = [...saleItems];
-                                  updated[index].quantity = Number(e.target.value);
+                                  const nextQty = Number(e.target.value || 0);
+
+                                  // 🔥 allow existing quantity + current stock only
+                                  const currentOriginalQty = Number(updated[index].original_quantity || updated[index].quantity || 0);
+                                  const currentBook = booksMap[updated[index].book_id] || {};
+                                  const currentStock = Number(currentBook.stock || 0);
+                                  const allowedQty = currentStock + currentOriginalQty;
+
+                                  if (nextQty > allowedQty) {
+                                    alert(`Only ${allowedQty} copies available including current invoice quantity`);
+                                    return;
+                                  }
+
+                                  updated[index].quantity = nextQty;
+                                  updated[index]._delete = nextQty === 0;
                                   setSaleItems(updated);
                                   const total = updated.reduce((sum, row) => {
                                     const p = Number(row.current_price || row.printed_price || row.price || 0);
@@ -1002,6 +1037,9 @@ function CustomerLedgerPage({ onViewSale }) {
                                 }}
                                 className="w-[64px] h-8 border border-gray-300 bg-white text-center font-medium rounded text-[13px]"
                               />
+                              <div className="text-[10px] text-gray-400 mt-1 text-center">
+                                Max: {maxAllowed}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-[15px] text-slate-900 align-top">
                               Rs {price.toLocaleString()}
@@ -1052,20 +1090,42 @@ function CustomerLedgerPage({ onViewSale }) {
                   disabled={savingEdit}
                   onClick={async () => {
                     try {
-                      setSavingEdit(true);
+                      // Validation for empty saleItems
+                      if (!saleItems.length) {
+                        alert("No invoice items available");
+                        return;
+                      }
+                      // Normalize items and calculate final amount
+                      const normalizedItems = saleItems
+                        .map((item) => ({
+                          book_id: Number(item.book_id || item.id),
+                          quantity: item._delete ? 0 : Number(item.quantity || 0),
+                          price: Number(item.current_price || item.printed_price || item.price || 0),
+                          discount: Number(item.discount || 0),
+                          title: item.title || item.book_name || "",
+                        }))
+                        .filter((item) => item.book_id);
+
+                      const finalAmount = normalizedItems.reduce((sum, item) => {
+                        if (item.quantity === 0) return sum;
+
+                        const subtotal = item.price * item.quantity;
+                        return sum + (subtotal - subtotal * (item.discount / 100));
+                      }, 0);
+
                       const res = await fetch(
                         `${API_BASE}/api/customers/${id}/ledger/${editingTransaction.id}`,
                         {
                           method: "PUT",
-                          headers: authHeaders(),
+                          headers: authHeaders(true),
                           body: JSON.stringify({
                             type: editingTransaction.type,
-                            amount: Number(editAmount),
-                            items: saleItems,
+                            amount: Number(finalAmount.toFixed(2)),
+                            items: normalizedItems,
                           }),
                         }
                       );
-                      const data = await res.json();
+                      const data = await res.json().catch(() => ({}));
                       if (!res.ok) {
                         throw new Error(data.error || "Update failed");
                       }

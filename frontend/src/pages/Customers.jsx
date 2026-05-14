@@ -215,12 +215,37 @@ function Customers() {
     return pages;
   };
 
-  const handleExport = () => {
-    const url = `${API}/api/customers/export?search=${search}&filter=${filter}`;
-    window.open(
-      `${url}&token=${localStorage.getItem("token")}`,
-      "_blank"
-    );
+  const handleExport = async () => {
+    try {
+      const response = await fetch(
+        `${API}/api/customers/export?search=${search}&filter=${filter}`,
+        {
+          headers: authHeaders(),
+        }
+      );
+  
+      if (!response.ok) {
+        throw new Error("Export failed");
+      }
+  
+      const blob = await response.blob();
+  
+      const url = window.URL.createObjectURL(blob);
+  
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "customers.xlsx";
+  
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+  
+      window.URL.revokeObjectURL(url);
+  
+    } catch (err) {
+      console.error(err);
+      alert("Export failed");
+    }
   };
 
   return (

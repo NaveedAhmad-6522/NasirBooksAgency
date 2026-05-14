@@ -1,5 +1,10 @@
 import db from "../config/db.js";
 
+// IMPORTANT DATABASE SAFETY:
+// Run once in MySQL:
+// ALTER TABLE sale_items
+// ADD UNIQUE unique_sale_book (sale_id, book_id);
+
 /* =========================
    🔍 SEARCH CUSTOMERS
 ========================= */
@@ -340,8 +345,8 @@ export const updateLedgerTransaction = (req, res) => {
 
   const newAmount = Number(amount || 0);
 
-  if (!type || !newAmount || newAmount <= 0) {
-    return res.status(400).json({ error: "Valid transaction data required" });
+  if (!type) {
+    return res.status(400).json({ error: "Transaction type required" });
   }
 
   // ==========================================
@@ -403,6 +408,15 @@ export const updateLedgerTransaction = (req, res) => {
   if (type === "sale") {
 
     const { items = [] } = req.body;
+    const sanitizedItems = items
+      .map((item) => ({
+        ...item,
+        quantity: Number(item.quantity || 0),
+        discount: Number(item.discount || 0),
+        price: Number(item.price || item.current_price || 0),
+        book_id: Number(item.book_id || 0),
+      }))
+      .filter((item) => item.book_id && item.quantity >= 0 && item.price >= 0);
 
     db.query(
       "SELECT customer_id, total_amount FROM sales WHERE id = ?",
@@ -420,15 +434,109 @@ export const updateLedgerTransaction = (req, res) => {
         const sale = rows[0];
         const oldAmount = Number(sale.total_amount || 0);
 
-        if (!Array.isArray(items) || !items.length) {
-          return res.status(400).json({ error: "No invoice items provided" });
+        // 🔥 prevent completely empty invoices
+        const activeItems = sanitizedItems.filter(i => Number(i.quantity || 0) > 0);
+
+        if (!activeItems.length) {
+          return res.status(400).json({
+            error: "Invoice must contain at least one item"
+          });
+        }
+
+        if (!sanitizedItems.length) {
+          return res.status(400).json({ error: "No valid invoice items provided" });
         }
 
         let completed = 0;
         let newTotal = 0;
 
-        items.forEach((item) => {
+        sanitizedItems.forEach((item) => {
           const qty = Number(item.quantity || 0);
+          // 🔥 quantity 0 means remove item from invoice
+          if (qty === 0) {
+
+            db.query(
+              `SELECT quantity
+               FROM sale_items
+               WHERE sale_id = ? AND book_id = ?
+               LIMIT 1`,
+              [id, item.book_id],
+              (oldErr, oldRows) => {
+
+                if (oldErr) {
+                  console.error(oldErr);
+                  return res.status(500).json({ error: "Old item fetch failed" });
+                }
+
+                const oldQty = Number(oldRows[0]?.quantity || 0);
+
+                // restore stock
+                db.query(
+                  `UPDATE books
+                   SET stock = stock + ?
+                   WHERE id = ?`,
+                  [oldQty, item.book_id],
+                  (stockErr) => {
+
+                    if (stockErr) {
+                      console.error(stockErr);
+                      return res.status(500).json({ error: "Stock restore failed" });
+                    }
+
+                    // delete invoice row
+                    db.query(
+                      `DELETE FROM sale_items
+                       WHERE sale_id = ? AND book_id = ?`,
+                      [id, item.book_id],
+                      (deleteErr) => {
+
+                        if (deleteErr) {
+                          console.error(deleteErr);
+                          return res.status(500).json({ error: "Invoice item delete failed" });
+                        }
+
+                        completed++;
+
+                        if (completed === sanitizedItems.length) {
+                          const diff = newTotal - oldAmount;
+
+                          db.query(
+                            "UPDATE sales SET total_amount = ? WHERE id = ?",
+                            [newTotal, id],
+                            (err3) => {
+                              if (err3) {
+                                console.error(err3);
+                                return res.status(500).json({ error: "Sale total update failed" });
+                              }
+
+                              db.query(
+                                "UPDATE customers SET balance = balance + ? WHERE id = ?",
+                                [diff, sale.customer_id],
+                                (err4) => {
+                                  if (err4) {
+                                    console.error(err4);
+                                    return res.status(500).json({ error: "Balance update failed" });
+                                  }
+
+                                  return res.json({
+                                    success: true,
+                                    message: "Invoice updated successfully",
+                                    total: newTotal
+                                  });
+                                }
+                              );
+                            }
+                          );
+                        }
+                      }
+                    );
+                  }
+                );
+              }
+            );
+
+            return;
+          }
           const discount = Number(item.discount || 0);
           const price = Number(item.price || item.current_price || 0);
 
@@ -437,73 +545,139 @@ export const updateLedgerTransaction = (req, res) => {
 
           newTotal += finalTotal;
 
+// 🔥 fetch previous quantity for stock adjustment
           db.query(
-            `UPDATE sale_items
-             SET
-               quantity = ?,
-               discount = ?,
-               final_price = ?
-             WHERE id = ?`,
-            [qty, discount, finalTotal, item.id],
-            (err2) => {
-              if (err2) {
-                console.error(err2);
-                return res.status(500).json({ error: "Sale item update failed" });
+            `SELECT quantity
+             FROM sale_items
+             WHERE sale_id = ? AND book_id = ?
+             LIMIT 1`,
+            [id, item.book_id],
+            (stockErr, stockRows) => {
+
+              if (stockErr) {
+                console.error(stockErr);
+                return res.status(500).json({ error: "Stock lookup failed" });
               }
 
-              // 🔥 ALSO UPDATE CUSTOMER DISCOUNT TABLE
+              const oldQty = Number(stockRows[0]?.quantity || 0);
+
+              // positive = deduct more stock
+              // negative = restore stock
+              const diffQty = qty - oldQty;
+
+              // 🔥 validate available stock first
               db.query(
-                `INSERT INTO customer_discounts (
-                  customer_id,
-                  book_id,
-                  discount
-                )
-                VALUES (?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                  discount = VALUES(discount)`,
-                [sale.customer_id, item.book_id, discount],
-                (discountErr) => {
-                  if (discountErr) {
-                    console.error("Customer discount update error:", discountErr);
+                `SELECT stock
+                 FROM books
+                 WHERE id = ?
+                 LIMIT 1`,
+                [item.book_id],
+                (stockCheckErr, stockCheckRows) => {
+
+                  if (stockCheckErr) {
+                    console.error(stockCheckErr);
+                    return res.status(500).json({
+                      error: "Stock validation failed"
+                    });
                   }
 
-                  completed++;
+                  const availableStock = Number(stockCheckRows[0]?.stock || 0);
 
-                  if (completed === items.length) {
-                    const diff = newTotal - oldAmount;
+                  // only validate when increasing quantity
+                  if (diffQty > 0 && availableStock < diffQty) {
+                    return res.status(400).json({
+                      error: `Insufficient stock for item ${item.book_id}`
+                    });
+                  }
 
-                    db.query(
-                      "UPDATE sales SET total_amount = ? WHERE id = ?",
-                      [newTotal, id],
-                      (err3) => {
-                        if (err3) {
-                          console.error(err3);
-                          return res.status(500).json({ error: "Sale total update failed" });
-                        }
+                  // 🔥 update inventory stock
+                  db.query(
+                    `UPDATE books
+                     SET stock = stock - ?
+                     WHERE id = ?`,
+                    [diffQty, item.book_id],
+                    (stockUpdateErr) => {
 
-                        db.query(
-                          "UPDATE customers SET balance = balance + ? WHERE id = ?",
-                          [diff, sale.customer_id],
-                          (err4) => {
-                            if (err4) {
-                              console.error(err4);
-                              return res.status(500).json({ error: "Balance update failed" });
-                            }
-
-                            return res.json({
-                              success: true,
-                              message: "Invoice updated successfully",
-                              total: newTotal
-                            });
-                          }
-                        );
+                      if (stockUpdateErr) {
+                        console.error(stockUpdateErr);
+                        return res.status(500).json({ error: "Stock update failed" });
                       }
-                    );
-                  }
+
+                      // 🔥 continue updating invoice item
+                      db.query(
+                        `UPDATE sale_items si
+                         JOIN sales s ON s.id = si.sale_id
+                         SET
+                           si.quantity = ?,
+                           si.discount = ?,
+                           si.final_price = ?,
+                           si.price = ?
+                         WHERE s.id = ? AND si.book_id = ?`,
+                        [qty, discount, finalTotal, price, id, item.book_id],
+                        (err2) => {
+                          if (err2) {
+                            console.error(err2);
+                            return res.status(500).json({ error: "Sale item update failed" });
+                          }
+
+                          // 🔥 ALSO UPDATE CUSTOMER DISCOUNT TABLE
+                          db.query(
+                            `INSERT INTO customer_discounts (
+                              customer_id,
+                              book_id,
+                              discount
+                            )
+                            VALUES (?, ?, ?)
+                            ON DUPLICATE KEY UPDATE
+                              discount = VALUES(discount)`,
+                            [sale.customer_id, item.book_id, discount],
+                            (discountErr) => {
+                              if (discountErr) {
+                                console.error("Customer discount update error:", discountErr);
+                              }
+
+                              completed++;
+
+                              if (completed === sanitizedItems.length) {
+                                const diff = newTotal - oldAmount;
+
+                                db.query(
+                                  "UPDATE sales SET total_amount = ? WHERE id = ?",
+                                  [newTotal, id],
+                                  (err3) => {
+                                    if (err3) {
+                                      console.error(err3);
+                                      return res.status(500).json({ error: "Sale total update failed" });
+                                    }
+
+                                    db.query(
+                                      "UPDATE customers SET balance = balance + ? WHERE id = ?",
+                                      [diff, sale.customer_id],
+                                      (err4) => {
+                                        if (err4) {
+                                          console.error(err4);
+                                          return res.status(500).json({ error: "Balance update failed" });
+                                        }
+
+                                        return res.json({
+                                          success: true,
+                                          message: "Invoice updated successfully",
+                                          total: newTotal
+                                        });
+                                      }
+                                    );
+                                  }
+                                );
+                              }
+                            }
+                          );
+                          return;
+                        }
+                      );
+                    }
+                  );
                 }
               );
-
-              return;
             }
           );
         });
