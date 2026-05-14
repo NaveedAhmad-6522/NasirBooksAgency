@@ -83,81 +83,38 @@ export const createSale = (req, res) => {
 
       const proceedWithSale = (finalCustomerId, isWalkIn) => {
 
-        // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
-        // timezone-safe + ignores seconds issues
-        const todaySaleSql = `
-          SELECT 
-            id,
-            total_amount,
-            paid_amount,
-            created_at
-          FROM sales
-          WHERE customer_id = ?
-          AND DATE(CONVERT_TZ(created_at, '+00:00', '+05:00')) =
-              DATE(CONVERT_TZ(NOW(), '+00:00', '+05:00'))
-          ORDER BY created_at DESC
-          LIMIT 1
-        `;
+        // ✅ WALK-IN SALES SHOULD ALWAYS CREATE NEW INVOICE
+        if (isWalkIn) {
+          return db.query(
+            "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
+            [finalCustomerId, total, paidValue],
+            (err, saleResult) => {
 
-        db.query(
-          todaySaleSql,
-          [finalCustomerId],
-          (findErr, existingSales) => {
-            if (findErr) {
+              if (err) {
+                return db.rollback(() =>
+                  res.status(500).json({
+                    error: "Walk-in sale failed"
+                  })
+                );
+              }
+
+              return continueSaleProcess(saleResult.insertId);
+            }
+          );
+        }
+
+        // ✅ ALWAYS CREATE NEW INVOICE
+        return db.query(
+          "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
+          [finalCustomerId, total, paidValue],
+          (err, saleResult) => {
+            if (err) {
               return db.rollback(() =>
-                res.status(500).json({ error: "Sale lookup failed" })
+                res.status(500).json({ error: "Sale failed" })
               );
             }
 
-            // ✅ EXISTING INVOICE FOUND
-            if (existingSales.length > 0) {
-              const existingSale = existingSales[0];
-
-              const saleId = existingSale.id;
-
-              
-              const updatedTotal =
-                Number(existingSale.total_amount || 0) + total;
-
-              const updatedPaid =
-                Number(existingSale.paid_amount || 0) + paidValue;
-
-              db.query(
-                `UPDATE sales
-                 SET
-                   total_amount = ?,
-                   paid_amount = ?
-                 WHERE id = ?`,
-                [updatedTotal, updatedPaid, saleId],
-                (updateErr) => {
-                  if (updateErr) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Sale update failed" })
-                    );
-                  }
-
-                  continueSaleProcess(saleId);
-                }
-              );
-            }
-
-            // ✅ CREATE NEW DAILY INVOICE
-            else {
-              console.log("🆕 Creating new daily invoice for customer:", finalCustomerId);
-              db.query(
-                "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
-                [finalCustomerId, total, paidValue],
-                (err, saleResult) => {
-                  if (err) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Sale failed" })
-                    );
-                  }
-
-                  continueSaleProcess(saleResult.insertId);
-                }
-              );
-            }
+            continueSaleProcess(saleResult.insertId);
           }
         );
 
@@ -249,17 +206,53 @@ export const createSale = (req, res) => {
 
               const item = items[index];
 
-              db.query(
-                "UPDATE books SET stock = stock - ? WHERE id = ?",
-                [Number(item.quantity), Number(item.book_id)],
-                (err) => {
-                  if (err) {
+              // 🔒 LOCK STOCK ROW
+               db.query(
+                `SELECT stock
+                 FROM books
+                 WHERE id = ?
+                 FOR UPDATE`,
+                [Number(item.book_id)],
+                (stockErr, stockRows) => {
+
+                  if (stockErr) {
                     return db.rollback(() =>
-                      res.status(500).json({ error: "Stock failed" })
+                      res.status(500).json({ error: "Stock lock failed" })
                     );
                   }
 
-                  updateStock(index + 1);
+                  if (!stockRows.length) {
+                    return db.rollback(() =>
+                      res.status(404).json({ error: "Book not found" })
+                    );
+                  }
+
+                  const currentStock = Number(stockRows[0].stock || 0);
+                  const requestedQty = Number(item.quantity || 0);
+
+                  // ❌ Prevent overselling
+                  if (currentStock < requestedQty) {
+                    return db.rollback(() =>
+                      res.status(400).json({
+                        error: `Insufficient stock for book ID ${item.book_id}`
+                      })
+                    );
+                  }
+
+                  // ✅ SAFE STOCK UPDATE
+                  db.query(
+                    "UPDATE books SET stock = stock - ? WHERE id = ?",
+                    [requestedQty, Number(item.book_id)],
+                    (err) => {
+                      if (err) {
+                        return db.rollback(() =>
+                          res.status(500).json({ error: "Stock failed" })
+                        );
+                      }
+
+                      updateStock(index + 1);
+                    }
+                  );
                 }
               );
             };
@@ -392,10 +385,17 @@ export const getSales = (req, res) => {
       const isWalkIn = s.is_walkin === 1;
       const paid = Number(s.paid_amount || 0);
 
+      const remaining = isWalkIn
+        ? 0
+        : (Number(s.total_amount) - paid);
+
       return {
         ...s,
         received_amount: paid,
-        remaining: isWalkIn ? 0 : (Number(s.total_amount) - paid),
+        remaining,
+        previous_balance: isWalkIn
+          ? 0
+          : Math.max(Number(s.customer_balance || 0) - remaining, 0),
       };
     });
 
@@ -439,12 +439,25 @@ export const getSaleById = (req, res) => {
       const isWalkIn = s.is_walkin === 1;
       const paid = Number(s.paid_amount || 0);
 
+      const remaining = isWalkIn
+        ? 0
+        : (Number(s.total_amount) - paid);
+
+      const previousBalance = isWalkIn
+        ? 0
+        : Math.max(
+            Number(s.customer_balance || 0) - remaining,
+            0
+          );
+
       res.json({
         sale: {
           ...s,
           received_amount: paid,
-          remaining: isWalkIn ? 0 : (Number(s.total_amount) - paid),
+          remaining,
+          previous_balance: previousBalance,
         },
+        previous_balance: previousBalance,
         items: itemsResult,
       });
     });

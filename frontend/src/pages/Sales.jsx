@@ -177,12 +177,59 @@ function Sales() {
               Invoice #{selectedSale.sale.id}
             </h2>
 
-            <div className="mb-4 text-sm">
-              <p><strong>Customer:</strong> {selectedSale.sale.customer_name || "Walk-in"}</p>
-              <p><strong>Date:</strong> {new Date(selectedSale.sale.created_at).toLocaleString()}</p>
+            <div className="mb-4 text-sm bg-gray-50 border rounded-lg p-3 space-y-1">
 
-              {/* 🔥 BALANCE */}
-              
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p>
+                  <strong>Customer:</strong>{" "}
+                  {selectedSale.sale.customer_name || "Walk-in Customer"}
+                </p>
+
+                {selectedSale.sale.is_walkin === 1 && (
+                  <span className="px-2 py-1 text-[10px] font-semibold rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                    WALK-IN SALE
+                  </span>
+                )}
+              </div>
+
+              <p>
+                <strong>Invoice:</strong> #{selectedSale.sale.id}
+              </p>
+
+              <p>
+                <strong>Date:</strong>{" "}
+                {new Date(selectedSale.sale.created_at).toLocaleString()}
+              </p>
+
+              {selectedSale.sale.phone && (
+                <p>
+                  <strong>Phone:</strong> {selectedSale.sale.phone}
+                </p>
+              )}
+
+              {selectedSale.sale.city && (
+                <p>
+                  <strong>City:</strong> {selectedSale.sale.city}
+                </p>
+              )}
+
+              {selectedSale.sale.address && (
+                <p>
+                  <strong>Address:</strong> {selectedSale.sale.address}
+                </p>
+              )}
+
+              {selectedSale.sale.customer_balance !== undefined &&
+                selectedSale.sale.customer_balance !== null &&
+                selectedSale.sale.is_walkin !== 1 && (
+                  <p>
+                    <strong>Customer Balance:</strong>{" "}
+                    <span className={`${Number(selectedSale.sale.customer_balance) > 0 ? "text-red-600" : "text-green-600"}`}>
+                      Rs {Number(selectedSale.sale.customer_balance).toFixed(2)}
+                    </span>
+                  </p>
+              )}
+
             </div>
 
             <div className="border rounded-lg overflow-x-auto text-sm">
@@ -195,10 +242,21 @@ function Sales() {
 
               {selectedSale.items.map((item) => (
                 <div key={item.id} className="grid grid-cols-4 min-w-[500px] px-3 py-2 border-t">
-                  <div>{item.title}</div>
+                  <div className="font-medium">{item.title}</div>
+                  {(item.publisher || item.author || item.edition) && (
+                    <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
+                      {item.author ? `${item.author}` : ""}
+                      {item.author && item.publisher ? " • " : ""}
+                      {item.publisher ? item.publisher : ""}
+                      {(item.author || item.publisher) && item.edition ? " • " : ""}
+                      {item.edition ? `Edition: ${item.edition}` : ""}
+                    </div>
+                  )}
                   <div>{item.quantity}</div>
                   <div>Rs {item.price}</div>
-                  <div>Rs {(item.price * item.quantity).toFixed(2)}</div> 
+                  <div className="font-semibold">
+                    Rs {(item.price * item.quantity).toFixed(2)}
+                  </div>
                 </div>
               ))}
             </div>

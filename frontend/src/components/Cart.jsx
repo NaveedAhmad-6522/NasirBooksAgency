@@ -302,6 +302,8 @@ function Cart({
               subtotal: Number(subtotal || 0),
               discount: Number(discount || 0),
               total: Number(total || 0),
+              previous_balance: Number(previousBalance || 0),
+              final_balance: Number(finalBalance || 0),
             })
           }
           className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl mt-2 text-[14px] font-semibold shadow-md hover:shadow-lg transition"

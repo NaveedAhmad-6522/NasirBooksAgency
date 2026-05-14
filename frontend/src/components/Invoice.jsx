@@ -9,7 +9,14 @@ const authHeaders = (json = false) => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
-function Invoice({ cart = [], customer = null, paid = 0, mode }) {
+function Invoice({
+  cart = [],
+  customer = null,
+  paid = 0,
+  previous_balance = 0,
+  updated_balance = 0,
+  mode,
+}) {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [booksMap, setBooksMap] = useState({});
@@ -26,11 +33,18 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         }
 
         @page {
-          margin: 10mm;
+          margin: 6mm;
         }
 
         table {
-          font-size: 12px;
+          font-size: 9px;
+          line-height: 1;
+        }
+
+        td,
+        th {
+          padding-top: 2px !important;
+          padding-bottom: 2px !important;
         }
 
         button {
@@ -111,7 +125,8 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   const customerData = data?.customer || data?.sale?.customer || {};
 
   // 🔥 CALCULATIONS
-  const previousBalance = 0;
+  const isWalkIn = !sale.customer_name || sale.customer_name === "Walk-in Customer";
+
   let subtotal = 0;
   let totalDiscount = 0;
 
@@ -133,20 +148,42 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
   const paidAmount = Number(sale.paid_amount || 0);
   const remaining = netTotal - paidAmount;
 
+  const currentCustomerBalance = Number(
+    mode === "pos"
+      ? updated_balance
+      : (
+          sale?.customer_balance ||
+          customerInfo?.balance ||
+          customerData?.balance ||
+          0
+        )
+  );
+
+  // 🔥 backend-calculated previous balance
+  const previousBalance = Number(
+    mode === "pos"
+      ? previous_balance
+      : (
+          sale?.previous_balance ||
+          data?.previous_balance ||
+          0
+        )
+  );
+
   console.log("INVOICE CUSTOMER DEBUG:", { data, sale, customerData, customer });
 
   return (
-    <div className="p-6 bg-gray-100 flex flex-col items-center print:bg-white print:p-4 print:min-h-0 print:h-auto">
+    <div className="p-4 bg-gray-100 flex flex-col items-center print:bg-white print:p-2 print:min-h-0 print:h-auto">
       <div className="w-[800px] print:w-full print:max-w-[750px] print:h-auto">
-        <div className="bg-white w-full rounded-xl shadow-lg p-6 space-y-6 relative print:w-full print:shadow-none print:rounded-none print:p-4 print:break-inside-avoid">
+        <div className="bg-white w-full rounded-xl shadow-lg p-3 space-y-2 relative print:w-full print:shadow-none print:rounded-none print:p-1.5 print:break-inside-avoid text-[11px] leading-tight">
 
 
         {/* HEADER */}
-        <div className="flex justify-between items-start border-b pb-5">
+        <div className="flex justify-between items-start border-b pb-2">
           <div>
-            <h1 className="text-2xl font-bold tracking-wide text-gray-900">NASIR BOOK AGENCY</h1>
+            <h1 className="text-lg font-bold tracking-wide text-gray-900">NASIR BOOK AGENCY</h1>
             <div className="text-xs text-gray-500 mt-1">Sales Invoice</div>
-            <div className="text-xs text-gray-600 mt-2 leading-relaxed space-y-1">
+            <div className="text-[10px] text-gray-600 mt-0.5 leading-tight space-y-0">
               <div>Dhakki Nalbandi, Qissa Khwani Bazar Peshawar</div>
               <div className="flex items-center gap-2">
                 <span>📞</span>
@@ -185,7 +222,7 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         </div>
 
         {/* CUSTOMER */}
-        <div className="grid grid-cols-2 gap-4 text-sm text-gray-800 mt-4">
+        <div className="grid grid-cols-2 gap-1 text-[11px] text-gray-800 mt-1">
           <div>
             <div className="font-semibold mb-1">Bill To</div>
             <div>{sale.customer_name || "Walk-in Customer"}</div>
@@ -224,16 +261,16 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
 
         {/* ITEMS */}
         <div>
-          <table className="w-full text-sm border-collapse mt-6">
-            <thead className="bg-gray-50 border-y text-xs uppercase">
+          <table className="w-full text-[10px] border-collapse mt-1 leading-tight">
+            <thead className="bg-gray-50 border-y text-[9px] uppercase">
               <tr>
-                <th className="py-3 text-left">#</th>
-                <th className="py-3 text-left">Item</th>
-                <th className="py-3 text-center">Qty</th>
-                <th className="py-3 text-right">Unit Price</th>
-                <th className="py-3 text-right">%</th>
-                <th className="py-3 text-right">Disc Price</th>
-                <th className="py-3 text-right">Total</th>
+                <th className="py-1 text-left">#</th>
+                <th className="py-1 text-left">Item</th>
+                <th className="py-1 text-center">Qty</th>
+                <th className="py-1 text-right">Unit Price</th>
+                <th className="py-1 text-right">%</th>
+                <th className="py-1 text-right">Disc Price</th>
+                <th className="py-1 text-right">Total</th>
               </tr>
             </thead>
 
@@ -253,12 +290,12 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
 
                 return (
                   <tr key={idx} className="border-b last:border-0">
-                    <td className="py-3">{idx + 1}</td>
+                    <td className="py-1">{idx + 1}</td>
 
-                    <td className="py-3 font-medium">
+                    <td className="py-1 font-medium">
                       <div>{name}</div>
                       {(publisher || edition) && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-[9px] text-gray-500 leading-tight">
                           {publisher ? publisher : ""}
                           {publisher && edition ? " • " : ""}
                           {edition ? `Edition: ${edition}` : ""}
@@ -266,21 +303,21 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
                       )}
                     </td>
 
-                    <td className="py-3 text-center">{qty}</td>
+                    <td className="py-1 text-center">{qty}</td>
 
-                    <td className="py-3 text-right">
+                    <td className="py-1 text-right">
                       Rs {price.toLocaleString()}
                     </td>
 
-                    <td className="py-3 text-right">
+                    <td className="py-1 text-right">
                       {disc}%
                     </td>
 
-                    <td className="py-3 text-right text-gray-700">
+                    <td className="py-1 text-right text-gray-700">
                       Rs {discounted.toLocaleString()}
                     </td>
 
-                    <td className="py-3 text-right font-semibold">
+                    <td className="py-1 text-right font-semibold">
                       Rs {total.toLocaleString()}
                     </td>
                   </tr>
@@ -292,7 +329,7 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
 
         {/* TOTALS */}
         <div className="flex justify-end">
-          <table className="w-[320px] text-sm mt-4">
+          <table className="w-[250px] text-[10px] mt-1">
             <tbody>
 
               <tr>
@@ -320,11 +357,38 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
                 <td className="py-1 text-right">Rs {paidAmount.toLocaleString()}</td>
               </tr>
 
+              {/* CUSTOMER BALANCE DETAILS */}
+              {!isWalkIn && (
+                <tr>
+                  <td className="py-1 text-gray-500">Previous Remaining</td>
+                  <td className={`py-1 text-right ${
+                    previousBalance > 0 ? "text-red-600" : "text-green-600"
+                  }`}>
+                    Rs {previousBalance.toLocaleString()}
+                  </td>
+                </tr>
+              )}
+
               {remaining > 0 && (
-                <tr className="border-t">
-                  <td className="py-2 font-bold text-red-600">Remaining</td>
-                  <td className="py-2 text-right font-bold text-red-600">
+                <tr>
+                  <td className="py-1 text-gray-500">
+                    {isWalkIn ? "Remaining" : "Current Invoice Due"}
+                  </td>
+                  <td className="py-1 text-right text-red-600 font-medium">
                     Rs {remaining.toLocaleString()}
+                  </td>
+                </tr>
+              )}
+
+              {!isWalkIn && (
+                <tr className="border-t">
+                  <td className="py-2 font-bold text-gray-700">Updated Balance</td>
+                  <td className={`py-2 text-right font-bold ${
+                    currentCustomerBalance > 0
+                      ? "text-red-600"
+                      : "text-green-600"
+                  }`}>
+                    Rs {currentCustomerBalance.toLocaleString()}
                   </td>
                 </tr>
               )}
@@ -333,7 +397,7 @@ function Invoice({ cart = [], customer = null, paid = 0, mode }) {
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-between items-center pt-6 border-t text-xs text-gray-400">
+        <div className="flex justify-between items-center pt-2 border-t text-[9px] text-gray-400">
           <div>Thank you for your business</div>
           <div>Nasir Book Agency</div>
         </div>

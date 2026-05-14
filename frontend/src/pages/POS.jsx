@@ -327,7 +327,13 @@ function POS() {
       );
   
       // ✅ Save snapshot BEFORE clearing
-      setInvoiceData({ cart, customer, paid });
+      setInvoiceData({
+        cart,
+        customer,
+        paid,
+        previous_balance: Number(customer?.balance || 0),
+        updated_balance: Number(res?.newBalance || 0),
+      });
 
       setShowInvoice(true);
       setToast("Sale Completed!");
@@ -486,12 +492,14 @@ function POS() {
             </button>
 
             <div className="print-area">
-              <Invoice
-                cart={invoiceData?.cart || []}
-                customer={invoiceData?.customer || null}
-                paid={invoiceData?.paid || 0}
-                mode="pos"
-              />
+            <Invoice
+  cart={invoiceData?.cart || []}
+  customer={invoiceData?.customer || null}
+  paid={invoiceData?.paid || 0}
+  previous_balance={invoiceData?.previous_balance || 0}
+  updated_balance={invoiceData?.updated_balance || 0}
+  mode="pos"
+/>
             </div>
 
           </div>
