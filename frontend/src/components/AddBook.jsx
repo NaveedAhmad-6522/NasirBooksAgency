@@ -306,8 +306,24 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Level (Class/Grade)</label>
-                <input name="level" value={book.level || ""} onChange={handleChange} className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-black outline-none" />
+                <label className="block text-xs text-gray-500 mb-1">
+                  Level (Class/Grade)
+                </label>
+
+                <select
+                  name="level"
+                  value={book.level || ""}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-black outline-none bg-white"
+                >
+                  <option value="">Select Level</option>
+                  <option value="Primary">Primary</option>
+                  <option value="Middle">Middle</option>
+                  <option value="Matric">Matric</option>
+                  <option value="FSC">FSC</option>
+                  <option value="BS">BS</option>
+                  <option value="Quran">Quran</option>
+                </select>
               </div>
             </div>
           </div>

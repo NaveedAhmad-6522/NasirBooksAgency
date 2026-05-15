@@ -104,20 +104,68 @@ export const createSale = (req, res) => {
         }
 
         // ✅ ALWAYS CREATE NEW INVOICE
-        return db.query(
-          "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
-          [finalCustomerId, total, paidValue],
-          (err, saleResult) => {
-            if (err) {
-              return db.rollback(() =>
-                res.status(500).json({ error: "Sale failed" })
-              );
-            }
+       // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
+db.query(
+  `SELECT id, total_amount, paid_amount
+   FROM sales
+   WHERE customer_id = ?
+   AND DATE(created_at) = CURDATE()
+   ORDER BY id DESC
+   LIMIT 1`,
+  [finalCustomerId],
+  (findErr, existingSales) => {
 
-            continueSaleProcess(saleResult.insertId);
+    if (findErr) {
+      return db.rollback(() =>
+        res.status(500).json({ error: "Sale lookup failed" })
+      );
+    }
+
+    // ✅ MERGE INTO EXISTING DAILY INVOICE
+    if (existingSales.length > 0) {
+      const existingSale = existingSales[0];
+
+      const updatedTotal =
+        Number(existingSale.total_amount || 0) + total;
+
+      const updatedPaid =
+        Number(existingSale.paid_amount || 0) + paidValue;
+
+      return db.query(
+        `UPDATE sales
+         SET
+           total_amount = ?,
+           paid_amount = ?
+         WHERE id = ?`,
+        [updatedTotal, updatedPaid, existingSale.id],
+        (updateErr) => {
+          if (updateErr) {
+            return db.rollback(() =>
+              res.status(500).json({ error: "Sale merge failed" })
+            );
           }
-        );
 
+          continueSaleProcess(existingSale.id);
+        }
+      );
+    }
+
+    // ✅ CREATE NEW INVOICE IF NONE EXISTS TODAY
+    db.query(
+      "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
+      [finalCustomerId, total, paidValue],
+      (err, saleResult) => {
+        if (err) {
+          return db.rollback(() =>
+            res.status(500).json({ error: "Sale failed" })
+          );
+        }
+
+        continueSaleProcess(saleResult.insertId);
+      }
+    );
+  }
+);
         function continueSaleProcess(saleId) {
 
             // 2️⃣ INSERT OR MERGE ITEMS INTO SAME DAILY INVOICE
