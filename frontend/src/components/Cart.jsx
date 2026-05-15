@@ -283,7 +283,8 @@ function Cart({
             <span>{format(previousBalance)}</span>
           </div>
           <div className="flex justify-between text-[13px] text-gray-500">
-            <span>Remaining</span>
+            <span>Current Bill
+            </span>
             <span className="font-medium text-gray-700">{format(billRemaining)}</span>
           </div>
         </div>

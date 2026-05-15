@@ -8,7 +8,8 @@ import {
   Settings,
   FileText,
   Wallet,
-  Truck
+  Truck,
+  LogOut
 } from "lucide-react";
 
 function Sidebar() {
@@ -45,8 +46,20 @@ function Sidebar() {
         <SidebarItem icon={<BarChart3 size={18} />} label="Reports" to="/reports" />
       </div>
 
-      {/* SUMMARY CARD */}
-      
+      {/* LOGOUT */}
+      <div className="p-4 border-t border-gray-700">
+        <button
+          onClick={() => {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            window.location.href = "/login";
+          }}
+          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 transition text-white"
+        >
+          <LogOut size={18} />
+          <span className="text-sm">Logout</span>
+        </button>
+      </div>
 
     </div>
   );
