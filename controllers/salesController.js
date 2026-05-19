@@ -56,20 +56,29 @@ export const createSale = (req, res) => {
     );
   };
 
-  db.beginTransaction((err) => {
-    if (err) return res.status(500).json({ error: "Transaction failed" });
+  db.getConnection((err, connection) => {
+    if (err) {
+      return res.status(500).json({ error: "Database connection failed" });
+    }
+
+    connection.beginTransaction((err) => {
+      if (err) {
+        connection.release();
+        return res.status(500).json({ error: "Transaction failed" });
+      }
 
     getCustomerId((finalCustomerId) => {
       const paidValue = Number(paid ?? paid_amount ?? 0);
 
-      db.query(
+      connection.query(
         "SELECT is_walkin FROM customers WHERE id = ?",
         [finalCustomerId],
         (err, customerRes) => {
           if (err || !customerRes.length) {
-            return db.rollback(() =>
-              res.status(500).json({ error: "Customer check failed" })
-            );
+            return connection.rollback(() => {
+              connection.release();
+              return res.status(500).json({ error: "Customer check failed" });
+            });
           }
 
           const isWalkIn = customerRes[0].is_walkin === 1;
@@ -85,17 +94,18 @@ export const createSale = (req, res) => {
 
         // ✅ WALK-IN SALES SHOULD ALWAYS CREATE NEW INVOICE
         if (isWalkIn) {
-          return db.query(
+          return connection.query(
             "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
             [finalCustomerId, total, paidValue],
             (err, saleResult) => {
 
               if (err) {
-                return db.rollback(() =>
-                  res.status(500).json({
+                return connection.rollback(() => {
+                  connection.release();
+                  return res.status(500).json({
                     error: "Walk-in sale failed"
-                  })
-                );
+                  });
+                });
               }
 
               return continueSaleProcess(saleResult.insertId);
@@ -104,68 +114,71 @@ export const createSale = (req, res) => {
         }
 
         // ✅ ALWAYS CREATE NEW INVOICE
-       // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
-db.query(
-  `SELECT id, total_amount, paid_amount
-   FROM sales
-   WHERE customer_id = ?
-   AND DATE(created_at) = CURDATE()
-   ORDER BY id DESC
-   LIMIT 1`,
-  [finalCustomerId],
-  (findErr, existingSales) => {
+        // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
+        connection.query(
+          `SELECT id, total_amount, paid_amount
+           FROM sales
+           WHERE customer_id = ?
+           AND DATE(created_at) = CURDATE()
+           ORDER BY id DESC
+           LIMIT 1`,
+          [finalCustomerId],
+          (findErr, existingSales) => {
 
-    if (findErr) {
-      return db.rollback(() =>
-        res.status(500).json({ error: "Sale lookup failed" })
-      );
-    }
+            if (findErr) {
+              return connection.rollback(() => {
+                connection.release();
+                return res.status(500).json({ error: "Sale lookup failed" });
+              });
+            }
 
-    // ✅ MERGE INTO EXISTING DAILY INVOICE
-    if (existingSales.length > 0) {
-      const existingSale = existingSales[0];
+            // ✅ MERGE INTO EXISTING DAILY INVOICE
+            if (existingSales.length > 0) {
+              const existingSale = existingSales[0];
 
-      const updatedTotal =
-        Number(existingSale.total_amount || 0) + total;
+              const updatedTotal =
+                Number(existingSale.total_amount || 0) + total;
 
-      const updatedPaid =
-        Number(existingSale.paid_amount || 0) + paidValue;
+              const updatedPaid =
+                Number(existingSale.paid_amount || 0) + paidValue;
 
-      return db.query(
-        `UPDATE sales
-         SET
-           total_amount = ?,
-           paid_amount = ?
-         WHERE id = ?`,
-        [updatedTotal, updatedPaid, existingSale.id],
-        (updateErr) => {
-          if (updateErr) {
-            return db.rollback(() =>
-              res.status(500).json({ error: "Sale merge failed" })
+              return connection.query(
+                `UPDATE sales
+                 SET
+                   total_amount = ?,
+                   paid_amount = ?
+                 WHERE id = ?`,
+                [updatedTotal, updatedPaid, existingSale.id],
+                (updateErr) => {
+                  if (updateErr) {
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(500).json({ error: "Sale merge failed" });
+                    });
+                  }
+
+                  continueSaleProcess(existingSale.id);
+                }
+              );
+            }
+
+            // ✅ CREATE NEW INVOICE IF NONE EXISTS TODAY
+            connection.query(
+              "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
+              [finalCustomerId, total, paidValue],
+              (err, saleResult) => {
+                if (err) {
+                  return connection.rollback(() => {
+                    connection.release();
+                    return res.status(500).json({ error: "Sale failed" });
+                  });
+                }
+
+                continueSaleProcess(saleResult.insertId);
+              }
             );
           }
-
-          continueSaleProcess(existingSale.id);
-        }
-      );
-    }
-
-    // ✅ CREATE NEW INVOICE IF NONE EXISTS TODAY
-    db.query(
-      "INSERT INTO sales (customer_id, total_amount, paid_amount) VALUES (?, ?, ?)",
-      [finalCustomerId, total, paidValue],
-      (err, saleResult) => {
-        if (err) {
-          return db.rollback(() =>
-            res.status(500).json({ error: "Sale failed" })
-          );
-        }
-
-        continueSaleProcess(saleResult.insertId);
-      }
-    );
-  }
-);
+        );
         function continueSaleProcess(saleId) {
 
             // 2️⃣ INSERT OR MERGE ITEMS INTO SAME DAILY INVOICE
@@ -183,7 +196,7 @@ db.query(
               const discount = Number(item.discount || 0);
 
               // 🔥 CHECK IF BOOK ALREADY EXISTS IN THIS SALE
-              db.query(
+              connection.query(
                 `SELECT id, quantity
                  FROM sale_items
                  WHERE sale_id = ?
@@ -192,9 +205,10 @@ db.query(
                 [saleIdValue, bookId],
                 (findErr, existingRows) => {
                   if (findErr) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Item lookup failed" })
-                    );
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(500).json({ error: "Item lookup failed" });
+                    });
                   }
 
                   // ✅ MERGE INTO EXISTING ROW
@@ -204,7 +218,7 @@ db.query(
                     const newQty =
                       Number(existing.quantity || 0) + qty;
 
-                    db.query(
+                    connection.query(
                       `UPDATE sale_items
                        SET
                          quantity = ?,
@@ -214,9 +228,10 @@ db.query(
                       [newQty, price, discount, existing.id],
                       (updateErr) => {
                         if (updateErr) {
-                          return db.rollback(() =>
-                            res.status(500).json({ error: "Item merge failed" })
-                          );
+                          return connection.rollback(() => {
+                            connection.release();
+                            return res.status(500).json({ error: "Item merge failed" });
+                          });
                         }
 
                         saveItems(index + 1);
@@ -226,16 +241,17 @@ db.query(
 
                   // ✅ INSERT NEW ITEM
                   else {
-                    db.query(
+                    connection.query(
                       `INSERT INTO sale_items
                        (sale_id, book_id, quantity, price, discount)
                        VALUES (?, ?, ?, ?, ?)`,
                       [saleIdValue, bookId, qty, price, discount],
                       (insertErr) => {
                         if (insertErr) {
-                          return db.rollback(() =>
-                            res.status(500).json({ error: "Item insert failed" })
-                          );
+                          return connection.rollback(() => {
+                            connection.release();
+                            return res.status(500).json({ error: "Item insert failed" });
+                          });
                         }
 
                         saveItems(index + 1);
@@ -255,7 +271,7 @@ db.query(
               const item = items[index];
 
               // 🔒 LOCK STOCK ROW
-               db.query(
+               connection.query(
                 `SELECT stock
                  FROM books
                  WHERE id = ?
@@ -264,15 +280,17 @@ db.query(
                 (stockErr, stockRows) => {
 
                   if (stockErr) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Stock lock failed" })
-                    );
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(500).json({ error: "Stock lock failed" });
+                    });
                   }
 
                   if (!stockRows.length) {
-                    return db.rollback(() =>
-                      res.status(404).json({ error: "Book not found" })
-                    );
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(404).json({ error: "Book not found" });
+                    });
                   }
 
                   const currentStock = Number(stockRows[0].stock || 0);
@@ -280,22 +298,24 @@ db.query(
 
                   // ❌ Prevent overselling
                   if (currentStock < requestedQty) {
-                    return db.rollback(() =>
-                      res.status(400).json({
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(400).json({
                         error: `Insufficient stock for book ID ${item.book_id}`
-                      })
-                    );
+                      });
+                    });
                   }
 
                   // ✅ SAFE STOCK UPDATE
-                  db.query(
+                  connection.query(
                     "UPDATE books SET stock = stock - ? WHERE id = ?",
                     [requestedQty, Number(item.book_id)],
                     (err) => {
                       if (err) {
-                        return db.rollback(() =>
-                          res.status(500).json({ error: "Stock failed" })
-                        );
+                        return connection.rollback(() => {
+                          connection.release();
+                          return res.status(500).json({ error: "Stock failed" });
+                        });
                       }
 
                       updateStock(index + 1);
@@ -310,13 +330,15 @@ db.query(
 
               // ✅ WALK-IN: DO NOT UPDATE BALANCE
               if (isWalkIn) {
-                return db.commit((err) => {
+                return connection.commit((err) => {
                   if (err) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Commit failed" })
-                    );
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(500).json({ error: "Commit failed" });
+                    });
                   }
 
+                  connection.release();
                   return res.json({
                     message: "Sale completed",
                     sale_id: saleId,
@@ -329,37 +351,41 @@ db.query(
               }
 
               // 🔽 NORMAL CUSTOMER FLOW
-              db.query(
+              connection.query(
                 "SELECT balance FROM customers WHERE id = ?",
                 [finalCustomerId],
                 (err, result) => {
                   if (err) {
-                    return db.rollback(() =>
-                      res.status(500).json({ error: "Balance fetch failed" })
-                    );
+                    return connection.rollback(() => {
+                      connection.release();
+                      return res.status(500).json({ error: "Balance fetch failed" });
+                    });
                   }
 
                   const oldBalance = Number(result[0]?.balance) || 0;
 
                   const newBalance = oldBalance + total - paidValue;
 
-                  db.query(
+                  connection.query(
                     "UPDATE customers SET balance = ? WHERE id = ?",
                     [newBalance, finalCustomerId],
                     (err) => {
                       if (err) {
-                        return db.rollback(() =>
-                          res.status(500).json({ error: "Balance update failed" })
-                        );
+                        return connection.rollback(() => {
+                          connection.release();
+                          return res.status(500).json({ error: "Balance update failed" });
+                        });
                       }
 
-                      db.commit((err) => {
+                      connection.commit((err) => {
                         if (err) {
-                          return db.rollback(() =>
-                            res.status(500).json({ error: "Commit failed" })
-                          );
+                          return connection.rollback(() => {
+                            connection.release();
+                            return res.status(500).json({ error: "Commit failed" });
+                          });
                         }
 
+                        connection.release();
                         res.json({
                           message: "Sale completed",
                           sale_id: saleId,
@@ -378,6 +404,7 @@ db.query(
       };
     });
   });
+});
 };
 
 

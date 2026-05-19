@@ -1,8 +1,5 @@
 import db from "../config/db.js";
-import util from "util";
-const promiseDb = {
-  query: util.promisify(db.query).bind(db)
-};
+const promiseDb = db.promise();
 
 export const getDashboardData = async (req, res) => {
     try {

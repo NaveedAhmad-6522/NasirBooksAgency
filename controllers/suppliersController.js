@@ -655,11 +655,18 @@ export const returnToSupplier = (req, res) => {
   }
 
   // 🔒 START TRANSACTION
-  db.beginTransaction((err) => {
+  db.getConnection((err, connection) => {
     if (err) {
       console.error("TX START ERROR:", err);
-      return res.status(500).json({ error: "Transaction failed" });
+      return res.status(500).json({ error: "Database connection failed" });
     }
+
+    connection.beginTransaction((err) => {
+      if (err) {
+        connection.release();
+        console.error("TX START ERROR:", err);
+        return res.status(500).json({ error: "Transaction failed" });
+      }
 
     // ✅ 1. Verify this book actually belongs to this supplier
     const checkRelationSql = `
@@ -668,16 +675,18 @@ export const returnToSupplier = (req, res) => {
       WHERE supplier_id = ? AND book_id = ?
     `;
 
-    db.query(checkRelationSql, [supplier_id, book_id], (err1, relResult) => {
+    connection.query(checkRelationSql, [supplier_id, book_id], (err1, relResult) => {
       if (err1) {
-        return db.rollback(() => {
+        return connection.rollback(() => {
           console.error("RELATION CHECK ERROR:", err1);
+          connection.release();
           res.status(500).json({ error: "Validation failed" });
         });
       }
 
       if (!relResult[0]?.count) {
-        return db.rollback(() => {
+        return connection.rollback(() => {
+          connection.release();
           res.status(400).json({ error: "This supplier never supplied this book" });
         });
       }
@@ -685,10 +694,11 @@ export const returnToSupplier = (req, res) => {
       // ✅ 2. Check stock
       const stockSql = "SELECT stock FROM books WHERE id = ? FOR UPDATE";
 
-      db.query(stockSql, [book_id], (err2, stockResult) => {
+      connection.query(stockSql, [book_id], (err2, stockResult) => {
         if (err2) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
             console.error("STOCK CHECK ERROR:", err2);
+            connection.release();
             res.status(500).json({ error: "Stock check failed" });
           });
         }
@@ -696,7 +706,8 @@ export const returnToSupplier = (req, res) => {
         const currentStock = stockResult[0]?.stock || 0;
 
         if (qty > currentStock) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
+            connection.release();
             res.status(400).json({
               error: `Cannot return more than available stock (${currentStock})`,
             });
@@ -721,13 +732,14 @@ export const returnToSupplier = (req, res) => {
           VALUES (?, ?, ?, ?, ?, 'return', ?)
         `;
 
-        db.query(
+        connection.query(
           insertSql,
           [book_id, supplier_id, qty, safePurchasePrice, safePrintedPrice, note],
           (err3) => {
             if (err3) {
-              return db.rollback(() => {
+              return connection.rollback(() => {
                 console.error("INSERT RETURN ERROR:", err3);
+                connection.release();
                 res.status(500).json({ error: "Failed to insert return" });
               });
             }
@@ -739,29 +751,33 @@ export const returnToSupplier = (req, res) => {
               WHERE id = ?
             `;
 
-            db.query(updateStockSql, [qty, book_id], (err4) => {
+            connection.query(updateStockSql, [qty, book_id], (err4) => {
               if (err4) {
-                return db.rollback(() => {
+                return connection.rollback(() => {
                   console.error("STOCK UPDATE ERROR:", err4);
+                  connection.release();
                   res.status(500).json({ error: "Stock update failed" });
                 });
               }
 
               // ✅ COMMIT
-              db.commit((commitErr) => {
+              connection.commit((commitErr) => {
                 if (commitErr) {
-                  return db.rollback(() => {
+                  return connection.rollback(() => {
                     console.error("COMMIT ERROR:", commitErr);
+                    connection.release();
                     res.status(500).json({ error: "Transaction commit failed" });
                   });
                 }
 
+                connection.release();
                 res.json({ message: "Return processed successfully" });
               });
             });
           }
         );
       });
+    });
     });
   });
 };
