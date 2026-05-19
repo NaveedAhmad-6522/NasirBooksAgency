@@ -201,26 +201,20 @@ export default function Suppliers() {
     const tableWrapperRef = useRef(null);
     const headerRef = useRef(null);
     useEffect(() => {
-        const calculateLimit = () => {
-            if (!tableWrapperRef.current) return;
-
-            const wrapperHeight = tableWrapperRef.current.clientHeight;
-
-            // approximate heights (adjust if needed)
-            const headerHeight = headerRef.current?.offsetHeight || 180; // header + stats + filters
-            const paginationHeight = 80;
-            const rowHeight = 60;
-
-            const available = wrapperHeight - headerHeight - paginationHeight;
-            const rows = Math.floor(available / rowHeight);
-
-            setLimit(Math.max(5, rows));
+        const updateLimit = () => {
+            if (window.innerWidth < 640) {
+                setLimit(5);
+            } else if (window.innerWidth < 1024) {
+                setLimit(8);
+            } else {
+                setLimit(10);
+            }
         };
 
-        calculateLimit();
-        window.addEventListener("resize", calculateLimit);
+        updateLimit();
+        window.addEventListener("resize", updateLimit);
 
-        return () => window.removeEventListener("resize", calculateLimit);
+        return () => window.removeEventListener("resize", updateLimit);
     }, []);
 
     const navigate = useNavigate();
@@ -250,7 +244,7 @@ export default function Suppliers() {
             console.log("FIRST ROW ACTIVE:", rows[0]?.is_active);
 
             setSuppliers([...rows]);
-            setTotal(filter === "all" ? (data.total || rows.length) : rows.length);
+            setTotal(data.total || rows.length);
         } catch (err) {
             console.error("Fetch suppliers error:", err);
         } finally {
@@ -305,13 +299,38 @@ export default function Suppliers() {
     const handleExport = async () => {
         try {
             setExportLoading(true);
-            const url = `${API}/api/suppliers/export?search=${search}&filter=${filter}`;
-            window.open(
-                `${url}&token=${localStorage.getItem("token")}`,
-                "_blank"
+    
+            const token = localStorage.getItem("token");
+    
+            const response = await fetch(
+                `${API}/api/suppliers/export?search=${search}&filter=${filter}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
             );
+    
+            if (!response.ok) {
+                throw new Error("Export failed");
+            }
+    
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+    
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "suppliers.xlsx";
+    
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+    
+            window.URL.revokeObjectURL(url);
+    
         } catch (err) {
             console.error("Export error:", err);
+            alert("Export failed");
         } finally {
             setExportLoading(false);
         }
@@ -461,7 +480,7 @@ export default function Suppliers() {
                             />
                         </div>
                         {/* PREMIUM PAGINATION */}
-                        {totalPages > 1 && (
+                        {total > limit && (
                             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-6">
                                 <span className="text-xs sm:text-sm text-gray-500 text-center sm:text-left">
     Showing {(page - 1) * limit + 1} - {Math.min(page * limit, total)} of {total}
@@ -480,37 +499,39 @@ export default function Suppliers() {
 
                                     {/* PAGE NUMBERS */}
                                     {[...Array(totalPages)].map((_, i) => {
-                                        const p = i + 1;
+    const p = i + 1;
 
-                                        // limit visible pages
-                                        if (
-                                            p === 1 ||
-                                            p === totalPages ||
-                                            (p >= page - 2 && p <= page + 2)
-                                        ) {
-                                            return (
-                                                <button
-                                                    key={p}
-                                                    type="button"
-                                                    onClick={() => setPage(p)}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm ${page === p
-                                                        ? "bg-blue-600 text-white"
-                                                        : "border hover:bg-gray-100"
-                                                        }`}
-                                                >
-                                                    {p}
-                                                </button>
-                                            );
-                                        }
+    const showPage =
+        p === 1 ||
+        p === totalPages ||
+        (p >= page - 1 && p <= page + 1);
 
-                                        // dots
-                                        if (p === page - 3 || p === page + 3) {
-                                            return <span key={p}>...</span>;
-                                        }
+    const showLeftDots = p === page - 2 && page > 3;
+    const showRightDots = p === page + 2 && page < totalPages - 2;
 
-                                        return null;
-                                    })}
+    if (showPage) {
+        return (
+            <button
+                key={p}
+                type="button"
+                onClick={() => setPage(p)}
+                className={`px-3 py-1.5 rounded-lg text-sm ${
+                    page === p
+                        ? "bg-blue-600 text-white"
+                        : "border hover:bg-gray-100"
+                }`}
+            >
+                {p}
+            </button>
+        );
+    }
 
+    if (showLeftDots || showRightDots) {
+        return <span key={p}>...</span>;
+    }
+
+    return null;
+})}
                                     {/* NEXT */}
                                     <button
                                         type="button"
