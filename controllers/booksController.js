@@ -216,9 +216,16 @@ export const getBooks = (req, res) => {
   if (status === "hidden") condition += " AND b.is_active = 0";
 
   if (search) {
-    condition += " AND (b.title LIKE ? OR b.category LIKE ? OR b.publisher LIKE ?)";
+    condition += `
+      AND (
+        b.title LIKE ?
+        OR b.category LIKE ?
+        OR b.publisher LIKE ?
+        OR CONCAT(b.publisher, ' ', b.title) LIKE ?
+      )
+    `;
     const like = `%${search}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
 
   const sql = `
@@ -300,12 +307,16 @@ export const searchBooks = (req, res) => {
       IFNULL(level, '') AS level
 
     FROM books
-    WHERE (title LIKE ? OR publisher LIKE ?) AND is_active = 1
+    WHERE (
+      title LIKE ?
+      OR publisher LIKE ?
+      OR CONCAT(publisher, ' ', title) LIKE ?
+    ) AND is_active = 1
     ORDER BY id DESC
     LIMIT 20
   `;
 
-  db.query(sql, [`%${q}%`, `%${q}%`], (err, result) => {
+  db.query(sql, [`%${q}%`, `%${q}%`, `%${q}%`], (err, result) => {
     if (err) {
       console.error("Search Error:", err);
       return res.status(500).json({ error: "Search failed" });
