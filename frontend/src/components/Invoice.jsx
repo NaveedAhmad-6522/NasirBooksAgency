@@ -283,10 +283,13 @@ function Invoice({
                 const discounted = price * (1 - disc / 100);
                 const total = discounted * qty;
 
-                const meta = booksMap[i.book_id] || {};
-                const name = i.book_name || i.title || meta.title || `Book #${i.book_id}`;
-                const publisher = i.publisher || meta.publisher;
-                const edition = i.edition || meta.edition;
+                const name =
+  i.book_name ||
+  i.title ||
+  `Book #${i.book_id}`;
+
+const publisher = i.publisher || "";
+const edition = i.edition || "";
 
                 return (
                   <tr key={idx} className="border-b last:border-0">

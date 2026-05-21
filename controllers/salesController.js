@@ -243,9 +243,27 @@ export const createSale = (req, res) => {
                   else {
                     connection.query(
                       `INSERT INTO sale_items
-                       (sale_id, book_id, quantity, price, discount)
-                       VALUES (?, ?, ?, ?, ?)`,
-                      [saleIdValue, bookId, qty, price, discount],
+                       (
+                         sale_id,
+                         book_id,
+                         quantity,
+                         price,
+                         discount,
+                         book_name,
+                         publisher,
+                         edition
+                       )
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                       [
+                        saleIdValue,
+                        bookId,
+                        qty,
+                        price,
+                        discount,
+                        item.title || "",
+                        item.publisher || "",
+                        item.edition || ""
+                      ],
                       (insertErr) => {
                         if (insertErr) {
                           return connection.rollback(() => {
@@ -494,9 +512,13 @@ export const getSaleById = (req, res) => {
   `;
 
   const itemsSql = `
-    SELECT si.*, b.title
+    SELECT
+      si.*,
+      COALESCE(si.book_name, b.title) AS title,
+      COALESCE(si.publisher, b.publisher) AS publisher,
+      COALESCE(si.edition, b.edition) AS edition
     FROM sale_items si
-    JOIN books b ON si.book_id = b.id
+    LEFT JOIN books b ON si.book_id = b.id
     WHERE si.sale_id = ?
   `;
 
