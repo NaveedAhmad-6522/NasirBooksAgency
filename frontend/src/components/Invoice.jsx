@@ -296,9 +296,13 @@ function Invoice({
                       <div>{name}</div>
                       {(publisher || edition) && (
                         <div className="text-[9px] text-gray-500 leading-tight">
-                          {publisher ? publisher : ""}
-                          {publisher && edition ? " • " : ""}
-                          {edition ? `Edition: ${edition}` : ""}
+                          {publisher && <span>{publisher}</span>}
+                          {edition && (
+                            <span>
+                              {publisher ? " • " : ""}
+                              Edition: {edition}
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
