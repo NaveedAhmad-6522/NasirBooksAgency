@@ -283,33 +283,24 @@ function Invoice({
                 const discounted = price * (1 - disc / 100);
                 const total = discounted * qty;
 
-                const name =
-  i.book_name ||
-  i.title ||
-  `Book #${i.book_id}`;
-
-const publisher = i.publisher || "";
-const edition = i.edition || "";
+                const meta = booksMap[i.book_id] || {};
+                const name = i.book_name || i.title || meta.title || `Book #${i.book_id}`;
+                const publisher = i.publisher || meta.publisher;
+                const edition = i.edition || meta.edition;
 
                 return (
                   <tr key={idx} className="border-b last:border-0">
                     <td className="py-1">{idx + 1}</td>
 
                     <td className="py-1 font-medium">
-                      <div>
-                        {publisher ? `${publisher} - ` : ""}
-                        {name}
-                      </div>
-
-                      {edition && (
+                      <div>{name}</div>
+                      {(publisher || edition) && (
                         <div className="text-[9px] text-gray-500 leading-tight">
-                          Edition: {edition}
+                          {publisher ? publisher : ""}
+                          {publisher && edition ? " • " : ""}
+                          {edition ? `Edition: ${edition}` : ""}
                         </div>
                       )}
-                    </td>
-
-                    <td className="py-1 text-left text-gray-700">
-                      -
                     </td>
 
                     <td className="py-1 text-center">{qty}</td>
