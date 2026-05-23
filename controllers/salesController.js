@@ -194,53 +194,91 @@ export const createSale = (req, res) => {
               const qty = Number(item.quantity || 0);
               const price = Number(item.current_price || item.printed_price || 0);
               const discount = Number(item.discount || 0);
-
-              // 🔥 CHECK IF BOOK ALREADY EXISTS IN THIS SALE
+              
+              // ✅ FETCH SNAPSHOT DATA FROM BOOKS TABLE
               connection.query(
-                `SELECT id, quantity
-                 FROM sale_items
-                 WHERE sale_id = ?
-                 AND book_id = ?
+                `SELECT title, publisher, edition
+                 FROM books
+                 WHERE id = ?
                  LIMIT 1`,
-                [saleIdValue, bookId],
-                (findErr, existingRows) => {
-                  if (findErr) {
+                [bookId],
+                (metaErr, metaRows) => {
+              
+                  if (metaErr) {
                     return connection.rollback(() => {
                       connection.release();
-                      return res.status(500).json({ error: "Item lookup failed" });
+                      return res.status(500).json({
+                        error: "Book metadata fetch failed"
+                      });
                     });
                   }
-
-                  // ✅ MERGE INTO EXISTING ROW
-                  if (existingRows.length > 0) {
-                    const existing = existingRows[0];
-
-                    const newQty =
-                      Number(existing.quantity || 0) + qty;
-
-                    connection.query(
-                      `UPDATE sale_items
-                       SET
-                         quantity = ?,
-                         price = ?,
-                         discount = ?
-                       WHERE id = ?`,
-                      [newQty, price, discount, existing.id],
-                      (updateErr) => {
-                        if (updateErr) {
-                          return connection.rollback(() => {
-                            connection.release();
-                            return res.status(500).json({ error: "Item merge failed" });
+              
+                  const snapshot = metaRows[0] || {};
+              
+                  // 🔥 CHECK IF BOOK ALREADY EXISTS IN THIS SALE
+                  connection.query(
+                    `SELECT id, quantity
+                     FROM sale_items
+                     WHERE sale_id = ?
+                     AND book_id = ?
+                     LIMIT 1`,
+                    [saleIdValue, bookId],
+                    (findErr, existingRows) => {
+              
+                      if (findErr) {
+                        return connection.rollback(() => {
+                          connection.release();
+                          return res.status(500).json({
+                            error: "Item lookup failed"
                           });
-                        }
-
-                        saveItems(index + 1);
+                        });
                       }
-                    );
-                  }
-
-                  // ✅ INSERT NEW ITEM
-                  else {
+              
+                      // ✅ MERGE INTO EXISTING ROW
+                      if (existingRows.length > 0) {
+              
+                        const existing = existingRows[0];
+              
+                        const newQty =
+                          Number(existing.quantity || 0) + qty;
+              
+                        connection.query(
+                          `UPDATE sale_items
+                           SET
+                             quantity = ?,
+                             price = ?,
+                             discount = ?,
+                             book_name = ?,
+                             publisher = ?,
+                             edition = ?
+                           WHERE id = ?`,
+                          [
+                            newQty,
+                            price,
+                            discount,
+                            snapshot.title || "",
+                            snapshot.publisher || "",
+                            snapshot.edition || "",
+                            existing.id
+                          ],
+                          (updateErr) => {
+              
+                            if (updateErr) {
+                              return connection.rollback(() => {
+                                connection.release();
+                                return res.status(500).json({
+                                  error: "Item merge failed"
+                                });
+                              });
+                            }
+              
+                            saveItems(index + 1);
+                          }
+                        );
+                      }
+              
+                      // ✅ INSERT NEW ITEM
+                      else {
                     connection.query(
                       `INSERT INTO sale_items
                        (
@@ -260,15 +298,17 @@ export const createSale = (req, res) => {
                         qty,
                         price,
                         discount,
-                        item.title || "",
-                        item.publisher || "",
-                        item.edition || ""
+                        snapshot.title || "",
+                        snapshot.publisher || "",
+                        snapshot.edition || ""
                       ],
                       (insertErr) => {
                         if (insertErr) {
                           return connection.rollback(() => {
                             connection.release();
-                            return res.status(500).json({ error: "Item insert failed" });
+                            return res.status(500).json({
+                              error: "Item insert failed"
+                            });
                           });
                         }
 
@@ -278,8 +318,9 @@ export const createSale = (req, res) => {
                   }
                 }
               );
-            };
-
+            }
+          );
+        };
             saveItems();
 
             // 3️⃣ UPDATE STOCK
