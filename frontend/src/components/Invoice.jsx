@@ -296,22 +296,20 @@ const edition = i.edition || "";
                     <td className="py-1">{idx + 1}</td>
 
                     <td className="py-1 font-medium">
-                      <div>{name}</div>
-                      {(publisher || edition) && (
+                      <div>
+                        {publisher ? `${publisher} - ` : ""}
+                        {name}
+                      </div>
+
+                      {edition && (
                         <div className="text-[9px] text-gray-500 leading-tight">
-                          {publisher && (
-                            <span>{publisher}</span>
-                          )}
-
-                          {publisher && edition && (
-                            <span> • </span>
-                          )}
-
-                          {edition && (
-                            <span>Edition: {edition}</span>
-                          )}
+                          Edition: {edition}
                         </div>
                       )}
+                    </td>
+
+                    <td className="py-1 text-left text-gray-700">
+                      -
                     </td>
 
                     <td className="py-1 text-center">{qty}</td>
