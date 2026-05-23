@@ -113,14 +113,19 @@ function Invoice({
   const items = mode === "pos" ? cart : data?.items || [];
 
   const sale = mode === "pos"
-    ? {
-        id: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-        created_at: new Date(),
-        customer_name: customer?.name,
-        payment_method: "cash",
-        paid_amount: paid,
-      }
-    : data?.sale || {};
+  ? {
+      invoice_number:
+        data?.sale?.invoice_number ||
+        data?.invoice_number ||
+        customer?.invoice_number ||
+        "",
+      id: data?.sale?.id || data?.sale_id || null,
+      created_at: new Date(),
+      customer_name: customer?.name,
+      payment_method: "cash",
+      paid_amount: paid,
+    }
+  : data?.sale || {};
 
   const customerData = data?.customer || data?.sale?.customer || {};
 
@@ -211,7 +216,7 @@ function Invoice({
 
             <div>
               <div className="font-semibold text-base">
-                Invoice #{sale?.id || "N/A"}
+                Invoice #{sale?.invoice_number || sale?.id || "N/A"}
               </div>
 
               <div className="text-gray-500 mt-1 text-xs">
@@ -284,9 +289,13 @@ function Invoice({
                 const total = discounted * qty;
 
                 const meta = booksMap[i.book_id] || {};
-                const name = i.book_name || i.title || meta.title || `Book #${i.book_id}`;
                 const publisher = i.publisher || meta.publisher;
                 const edition = i.edition || meta.edition;
+
+                const rawName = i.book_name || i.title || meta.title || `Book #${i.book_id}`;
+                const name = publisher
+                  ? `${publisher} - ${rawName}`
+                  : rawName;
 
                 return (
                   <tr key={idx} className="border-b last:border-0">
@@ -294,11 +303,9 @@ function Invoice({
 
                     <td className="py-1 font-medium">
                       <div>{name}</div>
-                      {(publisher || edition) && (
+                      {edition && (
                         <div className="text-[9px] text-gray-500 leading-tight">
-                          {publisher ? publisher : ""}
-                          {publisher && edition ? " • " : ""}
-                          {edition ? `Edition: ${edition}` : ""}
+                          Edition: {edition}
                         </div>
                       )}
                     </td>

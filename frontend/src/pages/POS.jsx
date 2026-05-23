@@ -331,6 +331,8 @@ function POS() {
         cart,
         customer,
         paid,
+        sale_id: res?.sale_id || null,
+        invoice_number: res?.invoice_number || "",
         previous_balance: Number(customer?.balance || 0),
         updated_balance: Number(res?.newBalance || 0),
       });
@@ -493,11 +495,19 @@ function POS() {
 
             <div className="print-area">
             <Invoice
+  key={invoiceData?.invoice_number || invoiceData?.sale_id || Date.now()}
   cart={invoiceData?.cart || []}
-  customer={invoiceData?.customer || null}
+  customer={{
+    ...(invoiceData?.customer || {}),
+    invoice_number: invoiceData?.invoice_number || "",
+  }}
   paid={invoiceData?.paid || 0}
   previous_balance={invoiceData?.previous_balance || 0}
   updated_balance={invoiceData?.updated_balance || 0}
+  data={{
+    invoice_number: invoiceData?.invoice_number || "",
+    sale_id: invoiceData?.sale_id || null,
+  }}
   mode="pos"
 />
             </div>

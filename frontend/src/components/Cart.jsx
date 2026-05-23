@@ -71,10 +71,11 @@ function Cart({
           </button>
         </div>
 
-        <div className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.6fr] px-5 py-2 text-[11px] text-gray-400 bg-gray-50 border-t">
+        <div className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_1fr_0.6fr] px-5 py-2 text-[11px] text-gray-400 bg-gray-50 border-t">
           <div>Book</div>
           <div className="text-center">Quantity</div>
           <div className="text-center">Price</div>
+          <div className="text-center">Sale Price</div>
           <div className="text-center">Disc%</div>
           <div className="text-right">Total</div>
           <div></div>
@@ -100,10 +101,14 @@ function Cart({
         const discountAmount = (itemTotal * disc) / 100;
         const final = itemTotal - discountAmount;
 
+        const salePrice = disc > 0
+          ? price - (price * disc) / 100
+          : 0;
+
         return (
           <div
             key={i.id}
-            className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_0.6fr] items-center px-5 py-2 border-b hover:bg-gray-50 print:break-inside-avoid"
+            className="grid grid-cols-[1.8fr_1fr_1fr_1fr_1fr_1fr_0.6fr] items-center px-5 py-2 border-b hover:bg-gray-50 print:break-inside-avoid"
           >
 
             {/* BOOK */}
@@ -181,13 +186,39 @@ function Cart({
         return { ...c, quantity: qty };
       }));
     }}
-    className="w-16 border rounded-lg text-center text-[13px] py-1 focus:ring-2 focus:ring-blue-500 outline-none"
+    className="w-12 border rounded-md text-center text-[12px] py-[3px] focus:ring-1 focus:ring-blue-500 outline-none"
   />
 </div>
 
             {/* PRICE */}
             <div className="text-center text-[12px] font-medium text-gray-800">
               {format(price)}
+            </div>
+
+            {/* SALE PRICE */}
+            <div className="text-center">
+              <input
+                type="number"
+                placeholder="0"
+                value={salePrice === 0 ? "" : Math.round(salePrice)}
+                onChange={(e) => {
+                  const val = e.target.value;
+
+                  if (val === "") {
+                    handleDiscountChange(i, 0);
+                    return;
+                  }
+
+                  const enteredSalePrice = Number(val);
+
+                  if (price <= 0) return;
+
+                  const calculatedDiscount = ((price - enteredSalePrice) / price) * 100;
+
+                  handleDiscountChange(i, Number(calculatedDiscount.toFixed(2)));
+                }}
+                className="w-12 border rounded-md text-center text-[10px] px-1 py-[3px]"
+              />
             </div>
 
             {/* DISCOUNT */}
@@ -209,7 +240,7 @@ function Cart({
                       : c
                   ))
                 }
-                className="w-12 border rounded text-center text-[12px]"
+                className="w-10 border rounded-md text-center text-[10px] px-1 py-[3px]"
               />
             </div>
 
