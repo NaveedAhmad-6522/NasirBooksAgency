@@ -91,7 +91,7 @@ function Cart({
       )}
 
       {/* ITEMS */}
-      {cart.map((i) => {
+      {[...cart].reverse().map((i) => {
 
         const price = Number(i.current_price) || 0;
         const qty = Number(i.quantity) || 0;
