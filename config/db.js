@@ -19,13 +19,11 @@ const db = mysql.createPool({
   if (err) {
     console.error("❌ DB Error:", err);
   } else {
-    console.log("✅ MySQL Pool Connected");
 
     connection.query("SET time_zone = '+05:00'", (tzErr) => {
       if (tzErr) {
         console.error("❌ Timezone Error:", tzErr);
       } else {
-        console.log("🇵🇰 MySQL timezone set to Pakistan (+05:00)");
       }
     });
 

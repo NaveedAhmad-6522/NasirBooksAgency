@@ -35,14 +35,14 @@ app.use("/api/reports", reportRoutes);
 app.use("/api", loginRoutes);
 // 🔹 TEST ROUTE
 app.get("/", (req, res) => {
-  res.send("Backend Running 🚀");
+  res.send("Backend Running ");
 });
 
 // 🔹 SERVER START
 const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 
