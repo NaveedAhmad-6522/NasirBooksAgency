@@ -242,16 +242,19 @@ function Sales() {
 
               {selectedSale.items.map((item) => (
                 <div key={item.id} className="grid grid-cols-4 min-w-[500px] px-3 py-2 border-t">
-                  <div className="font-medium">{item.title}</div>
-                  {(item.publisher || item.author || item.edition) && (
-                    <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
-                      {item.author ? `${item.author}` : ""}
-                      {item.author && item.publisher ? " • " : ""}
-                      {item.publisher ? item.publisher : ""}
-                      {(item.author || item.publisher) && item.edition ? " • " : ""}
-                      {item.edition ? `Edition: ${item.edition}` : ""}
-                    </div>
-                  )}
+                  <div>
+                    <div className="font-medium">{item.title}</div>
+                    {(item.publisher || item.author || item.edition) && (
+                      <div className="text-[11px] text-gray-500 leading-tight mt-0.5">
+                        {item.author ? `${item.author}` : ""}
+                        {item.author && item.publisher ? " • " : ""}
+                        {item.publisher ? item.publisher : ""}
+                        {(item.author || item.publisher) && item.edition ? " • " : ""}
+                        {item.edition ? `Edition: ${item.edition}` : ""}
+                      </div>
+                    )}
+                  </div>
+
                   <div>{item.quantity}</div>
                   <div>Rs {item.price}</div>
                   <div className="font-semibold">
