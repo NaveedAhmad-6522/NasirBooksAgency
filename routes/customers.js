@@ -10,6 +10,7 @@ import {
   addCustomerReturn,
   getCustomerById,
   getCitySummary,
+  updateCustomer,
   updateLedgerTransaction,
 } from "../controllers/customersController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
@@ -38,6 +39,7 @@ router.get("/export", verifyToken, exportCustomers);
 ========================= */
 router.get("/:id/sales", verifyToken, getCustomerSales);
 router.get("/city-summary", verifyToken, getCitySummary);
+router.put("/:id", verifyToken, updateCustomer);
 router.get("/:id", verifyToken, getCustomerById);
 /* =========================
    🔁 CUSTOMER RETURN

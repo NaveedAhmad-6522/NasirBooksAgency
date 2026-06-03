@@ -1260,6 +1260,64 @@ export const getCustomerById = (req, res) => {
 };
 
 /* =========================
+   ✏️ UPDATE CUSTOMER
+========================= */
+export const updateCustomer = (req, res) => {
+  const { id } = req.params;
+  let { name, phone, city, address } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({
+      error: "Customer name is required",
+    });
+  }
+
+  name = name.trim();
+  phone = phone || null;
+  city = city || null;
+  address = address || null;
+
+  db.query(
+    `UPDATE customers
+     SET
+       name = ?,
+       phone = ?,
+       city = ?,
+       address = ?
+     WHERE id = ?`,
+    [name, phone, city, address, id],
+    (err) => {
+      if (err) {
+        console.error("Update Customer Error:", err);
+        return res.status(500).json({
+          error: "Failed to update customer",
+        });
+      }
+
+      db.query(
+        `SELECT id, name, phone, city, address, balance
+         FROM customers
+         WHERE id = ?`,
+        [id],
+        (err2, rows) => {
+          if (err2) {
+            console.error(err2);
+            return res.status(500).json({
+              error: "Customer updated but fetch failed",
+            });
+          }
+
+          res.json({
+            success: true,
+            customer: rows[0],
+          });
+        }
+      );
+    }
+  );
+};
+
+/* =========================
    🏙️ CITY SUMMARY REPORT
 ========================= */
 export const getCitySummary = (req, res) => {

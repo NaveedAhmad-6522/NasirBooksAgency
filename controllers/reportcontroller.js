@@ -65,18 +65,28 @@ const [supplierReturnsRows] = await db.promise().query(`
 const customerReturns = Number(customerReturnsRows[0]?.totalCustomerReturns || 0);
 const supplierReturns = Number(supplierReturnsRows[0]?.totalSupplierReturns || 0);
 
-    const [profitRows] = await db.promise().query(`
-  SELECT 
-    IFNULL(SUM(
-      (si.price * si.quantity) - (p.purchase_price * si.quantity)
-    ), 0) AS totalProfit
+const [profitRows] = await db.promise().query(`
+  SELECT
+    IFNULL(
+      SUM(
+        (
+          (si.price * (1 - IFNULL(si.discount,0)/100))
+          * si.quantity
+        )
+        -
+        (p.purchase_price * si.quantity)
+      ),
+      0
+    ) AS totalProfit
   FROM sale_items si
+  JOIN sales s ON si.sale_id = s.id
   LEFT JOIN (
-    SELECT book_id, MAX(purchase_price) as purchase_price
+    SELECT book_id, MAX(purchase_price) AS purchase_price
     FROM purchases
     GROUP BY book_id
   ) p ON si.book_id = p.book_id
-`);
+  WHERE ${effectiveDateCondition.replaceAll("created_at", "s.created_at")}
+`, params);
 
 const totalProfit = Number(profitRows[0]?.totalProfit || 0);
 
@@ -204,7 +214,7 @@ const totalProfit = Number(profitRows[0]?.totalProfit || 0);
     });
 
   } catch (error) {
-    console.error("❌ REPORT ERROR:", error);
+    console.error("REPORT ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -260,7 +270,7 @@ export const getSalesDetails = async (req, res) => {
     })));
 
   } catch (error) {
-    console.error("❌ SALES DETAILS ERROR:", error);
+    console.error(" SALES DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -312,7 +322,7 @@ export const getPaymentsDetails = async (req, res) => {
     })));
 
   } catch (error) {
-    console.error("❌ PAYMENTS DETAILS ERROR:", error);
+    console.error("PAYMENTS DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -360,7 +370,7 @@ export const getReceivableDetails = async (req, res) => {
     })));
 
   } catch (error) {
-    console.error("❌ RECEIVABLE DETAILS ERROR:", error);
+    console.error("RECEIVABLE DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -402,7 +412,7 @@ export const getPayableDetails = async (req, res) => {
     })));
 
   } catch (error) {
-    console.error("❌ PAYABLE DETAILS ERROR:", error);
+    console.error(" PAYABLE DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -458,7 +468,7 @@ export const getInventoryDetails = async (req, res) => {
     res.json([...data, summary]);
 
   } catch (error) {
-    console.error("❌ INVENTORY DETAILS ERROR:", error);
+    console.error("INVENTORY DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -485,7 +495,7 @@ export const getLowStockDetails = async (req, res) => {
     })));
 
   } catch (error) {
-    console.error("❌ LOW STOCK DETAILS ERROR:", error);
+    console.error("LOW STOCK DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -503,15 +513,17 @@ SELECT
   b.printed_price,
   SUM(si.quantity) AS total_sold,
 
-  (si.price - p.purchase_price) AS profit_per_unit,
+  (
+    (si.price * (1 - IFNULL(si.discount,0)/100))
+    - p.purchase_price
+  ) AS profit_per_unit,
 
-  CASE 
-    WHEN p.purchase_price > 0 
-    THEN ((si.price - p.purchase_price) / p.purchase_price) * 100
-    ELSE 0
-  END AS profit_percentage,
-
-  SUM((si.price - p.purchase_price) * si.quantity) AS total_profit
+  SUM(
+   (
+     (si.price * (1 - IFNULL(si.discount,0)/100))
+     - p.purchase_price
+   ) * si.quantity
+  ) AS total_profit
 
 FROM sale_items si
 LEFT JOIN books b ON si.book_id = b.id
@@ -521,7 +533,15 @@ LEFT JOIN (
   GROUP BY book_id
 ) p ON si.book_id = p.book_id
 
-GROUP BY si.book_id, si.price, p.purchase_price
+GROUP BY
+  si.book_id,
+  si.price,
+  si.discount,
+  p.purchase_price,
+  b.title,
+  b.publisher,
+  b.edition,
+  b.printed_price
 ORDER BY total_profit DESC;
     `);
 
@@ -534,7 +554,6 @@ ORDER BY total_profit DESC;
       printed_price: Number(r.printed_price || 0),
       total_sold: Number(r.total_sold || 0),
       profit_per_unit: Number(r.profit_per_unit || 0),
-      profit_percentage: Number(r.profit_percentage || 0).toFixed(2),
       total_profit: Number(r.total_profit || 0)
     }));
 
@@ -547,14 +566,13 @@ ORDER BY total_profit DESC;
       printed_price: 0,
       total_sold: data.reduce((s, r) => s + r.total_sold, 0),
       profit_per_unit: 0,
-      profit_percentage: "",
       total_profit: data.reduce((s, r) => s + r.total_profit, 0)
     };
 
     res.json([...data, summary]);
 
   } catch (error) {
-    console.error("❌ PROFIT DETAILS ERROR:", error);
+    console.error(" PROFIT DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -607,7 +625,7 @@ export const getCustomerReturnsDetails = async (req, res) => {
           items = [items];
         }
       } catch (e) {
-        console.error("❌ JSON parse error:", r.items);
+        console.error("JSON parse error:", r.items);
         items = [];
       }
 
@@ -655,7 +673,7 @@ export const getCustomerReturnsDetails = async (req, res) => {
     res.json(result);
 
   } catch (error) {
-    console.error("❌ CUSTOMER RETURNS DETAILS ERROR:", error);
+    console.error("CUSTOMER RETURNS DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -708,7 +726,7 @@ ORDER BY p.created_at DESC
     })));
 
   } catch (error) {
-    console.error("❌ SUPPLIER RETURNS DETAILS ERROR:", error);
+    console.error("SUPPLIER RETURNS DETAILS ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };

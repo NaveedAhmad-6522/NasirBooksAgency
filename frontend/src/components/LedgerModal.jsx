@@ -239,6 +239,13 @@ function CustomerLedgerPage({ onViewSale }) {
   const [saleItems, setSaleItems] = React.useState([]);
   const [booksMap, setBooksMap] = React.useState({});
   const [search, setSearch] = React.useState("");
+  const [showEditCustomer, setShowEditCustomer] = React.useState(false);
+  const [editCustomer, setEditCustomer] = React.useState({
+    name: "",
+    phone: "",
+    city: "",
+    address: "",
+  });
 
   // Fetch ledger utility for refresh
   const fetchLedger = () => {
@@ -390,6 +397,20 @@ function CustomerLedgerPage({ onViewSale }) {
               className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
             >
               Return
+            </button>
+            <button
+              onClick={() => {
+                setEditCustomer({
+                  name: customer.name || "",
+                  phone: customer.phone || "",
+                  city: customer.city || "",
+                  address: customer.address || "",
+                });
+                setShowEditCustomer(true);
+              }}
+              className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800"
+            >
+              Edit Customer
             </button>
           </div>
         </div>
@@ -807,6 +828,82 @@ function CustomerLedgerPage({ onViewSale }) {
         </div>
 
       </div>
+
+      {showEditCustomer && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[500px] space-y-4 shadow-xl">
+            <h3 className="text-lg font-semibold">Edit Customer</h3>
+
+            <input
+              type="text"
+              placeholder="Customer Name"
+              value={editCustomer.name}
+              onChange={(e) => setEditCustomer({ ...editCustomer, name: e.target.value })}
+              className="w-full border p-2 rounded"
+            />
+
+            <input
+              type="text"
+              placeholder="Phone"
+              value={editCustomer.phone}
+              onChange={(e) => setEditCustomer({ ...editCustomer, phone: e.target.value })}
+              className="w-full border p-2 rounded"
+            />
+
+            <input
+              type="text"
+              placeholder="City"
+              value={editCustomer.city}
+              onChange={(e) => setEditCustomer({ ...editCustomer, city: e.target.value })}
+              className="w-full border p-2 rounded"
+            />
+
+            <textarea
+              placeholder="Address"
+              value={editCustomer.address}
+              onChange={(e) => setEditCustomer({ ...editCustomer, address: e.target.value })}
+              className="w-full border p-2 rounded h-24"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowEditCustomer(false)}
+                className="px-3 py-2 border rounded"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/api/customers/${id}`, {
+                      method: 'PUT',
+                      headers: authHeaders(true),
+                      body: JSON.stringify(editCustomer),
+                    });
+
+                    const result = await res.json().catch(() => ({}));
+
+                    if (!res.ok) {
+                      throw new Error(result.error || 'Failed to update customer');
+                    }
+
+                    setShowEditCustomer(false);
+                    fetchLedger();
+                    alert('Customer updated successfully');
+                  } catch (err) {
+                    console.error(err);
+                    alert(err.message || 'Failed to update customer');
+                  }
+                }}
+                className="px-3 py-2 bg-blue-600 text-white rounded"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
