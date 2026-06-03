@@ -277,41 +277,128 @@ function Customers() {
         <head>
           <title>${data.city} Customer Summary</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #f3f4f6; }
-          </style>
+  @page {
+    margin: 6mm;
+    size: A4;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: white;
+    color: #111827;
+  }
+
+  .invoice {
+    width: 100%;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #d1d5db;
+    padding-bottom: 8px;
+  }
+
+  .company-title {
+    font-size: 22px;
+    font-weight: bold;
+    margin: 0;
+  }
+
+  .invoice-label {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .contact {
+    font-size: 10px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
+
+  .right {
+    text-align: right;
+  }
+
+  .right .report-title {
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .summary {
+    margin-top: 8px;
+    font-size: 11px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 10px;
+  }
+
+  thead {
+    background: #f9fafb;
+  }
+
+  th, td {
+    border: 1px solid #d1d5db;
+    padding: 6px;
+  }
+
+  th {
+    text-transform: uppercase;
+    font-size: 9px;
+  }
+
+  .balance {
+    text-align: right;
+    font-weight: 600;
+  }
+
+  .receive {
+    width: 120px;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid #d1d5db;
+    margin-top: 12px;
+    padding-top: 6px;
+    font-size: 9px;
+    color: #6b7280;
+  }
+</style>
         </head>
         <body>
-          <div style="text-align:center;margin-bottom:20px;">
-  <h1 style="margin:0;">NASIR BOOK AGENCY</h1>
+          <div class="invoice">
+  <div class="header">
+    <div>
+      <div class="company-title">NASIR BOOK AGENCY</div>
+      <div class="invoice-label">City Customer Report</div>
 
-  <div style="margin-top:8px;">
-    Dhakki Nalbandi, Qissa Khwani Bazar Peshawar
+      <div class="contact">
+        Dhakki Nalbandi, Qissa Khwani Bazar Peshawar<br>
+        📞 091-2572277<br>
+        📞 0302-8884377<br>
+        📞 0311-3888849
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="report-title">${data.city}</div>
+      <div>${new Date().toLocaleDateString()}</div>
+    </div>
   </div>
 
-  <div style="margin-top:8px; line-height:1.6;">
-    091-2572277<br>
-    0302-8884377<br>
-    0311-3888849
+  <div class="summary">
+    <strong>Total Customers:</strong> ${data.totalCustomers}<br>
+    <strong>Total Outstanding:</strong> Rs ${Number(data.totalOutstanding || 0).toLocaleString()}
   </div>
-
-  <h2 style="margin-top:20px;">
-    CITY CUSTOMER REPORT
-  </h2>
-
-  <div>
-    City: ${data.city}
-  </div>
-
-  <div>
-    Date: ${new Date().toLocaleDateString()}
-  </div>
-</div>
-
-<p><strong>Total Customers:</strong> ${data.totalCustomers}</p>
-<p><strong>Total Outstanding:</strong> Rs ${Number(data.totalOutstanding || 0).toLocaleString()}</p>
 
           <table>
             <thead>
@@ -331,12 +418,17 @@ function Customers() {
                   <td>${c.name || ''}</td>
                   <td>${c.phone || '-'}</td>
                   <td>${c.city || '-'}</td>
-                  <td>Rs ${Number(c.balance || 0).toLocaleString()}</td>
-                  <td style="min-width:120px;"></td>
+                  <td class="balance">Rs ${Number(c.balance || 0).toLocaleString()}</td>
+                  <td class="receive"></td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
+          <div class="footer">
+  <div>Generated from Nasir Book Agency POS</div>
+  <div>Nasir Book Agency</div>
+</div>
+</div>
         </body>
         </html>
       `);
