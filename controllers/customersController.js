@@ -1258,3 +1258,49 @@ export const getCustomerById = (req, res) => {
     }
   );
 };
+
+/* =========================
+   🏙️ CITY SUMMARY REPORT
+========================= */
+export const getCitySummary = (req, res) => {
+  const { city = "" } = req.query;
+
+  if (!city.trim()) {
+    return res.status(400).json({
+      error: "City is required"
+    });
+  }
+
+  const sql = `
+    SELECT
+      id,
+      name,
+      phone,
+      city,
+      balance
+    FROM customers
+    WHERE city LIKE ?
+    ORDER BY name ASC
+  `;
+
+  db.query(sql, [`%${city}%`], (err, rows) => {
+    if (err) {
+      console.error("City Summary Error:", err);
+      return res.status(500).json({
+        error: "Failed to fetch city customers"
+      });
+    }
+
+    const totalOutstanding = rows.reduce(
+      (sum, c) => sum + Number(c.balance || 0),
+      0
+    );
+
+    res.json({
+      city,
+      totalCustomers: rows.length,
+      totalOutstanding,
+      customers: rows
+    });
+  });
+};

@@ -6,8 +6,9 @@ function CustomersHeader({
   filter,
   setFilter,
   setShowPayment,
-  setShowCustomerModal,  // ✅ USE THIS
-  onExport               // ✅ NEW PROP
+  setShowCustomerModal,
+  onExport,
+  setShowCityReport
 }) {
   return (
     <div className="bg-white p-5 rounded-2xl shadow-sm flex items-center justify-between gap-4">
@@ -34,6 +35,12 @@ function CustomersHeader({
         className="bg-emerald-600 text-white px-4 py-2 rounded-lg shadow hover:opacity-90 transition"
       >
         Export Excel
+      </button>
+      <button
+        onClick={() => setShowCityReport(true)}
+        className="bg-purple-600 text-white px-4 py-2 rounded-lg shadow hover:opacity-90 transition"
+      >
+        City Summary PDF
       </button>
         {/* ✅ ADD CUSTOMER */}
         <button

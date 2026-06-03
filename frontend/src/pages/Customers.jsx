@@ -32,6 +32,8 @@ function Customers() {
   const [total, setTotal] = useState(0);
 
   const [showPayment, setShowPayment] = useState(false);
+  const [showCityReport, setShowCityReport] = useState(false);
+  const [cityReportCity, setCityReportCity] = useState("");
 
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
@@ -248,6 +250,108 @@ function Customers() {
     }
   };
 
+  const handleCityReport = async () => {
+    try {
+      if (!cityReportCity.trim()) {
+        alert("Please enter a city");
+        return;
+      }
+
+      const res = await fetch(
+        `${API}/api/customers/city-summary?city=${encodeURIComponent(cityReportCity)}`,
+        {
+          headers: authHeaders(),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to load city report");
+      }
+
+      const data = await res.json();
+
+      const printWindow = window.open("", "_blank");
+
+      printWindow.document.write(`
+        <html>
+        <head>
+          <title>${data.city} Customer Summary</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background: #f3f4f6; }
+          </style>
+        </head>
+        <body>
+          <div style="text-align:center;margin-bottom:20px;">
+  <h1 style="margin:0;">NASIR BOOK AGENCY</h1>
+
+  <div style="margin-top:8px;">
+    Dhakki Nalbandi, Qissa Khwani Bazar Peshawar
+  </div>
+
+  <div style="margin-top:8px; line-height:1.6;">
+    091-2572277<br>
+    0302-8884377<br>
+    0311-3888849
+  </div>
+
+  <h2 style="margin-top:20px;">
+    CITY CUSTOMER REPORT
+  </h2>
+
+  <div>
+    City: ${data.city}
+  </div>
+
+  <div>
+    Date: ${new Date().toLocaleDateString()}
+  </div>
+</div>
+
+<p><strong>Total Customers:</strong> ${data.totalCustomers}</p>
+<p><strong>Total Outstanding:</strong> Rs ${Number(data.totalOutstanding || 0).toLocaleString()}</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>City</th>
+                <th>Balance</th>
+                <th>Receive</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.customers.map((c, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${c.name || ''}</td>
+                  <td>${c.phone || '-'}</td>
+                  <td>${c.city || '-'}</td>
+                  <td>Rs ${Number(c.balance || 0).toLocaleString()}</td>
+                  <td style="min-width:120px;"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+      printWindow.print();
+
+      setShowCityReport(false);
+      setCityReportCity("");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate city report");
+    }
+  };
+
   return (
     <div className="h-screen flex bg-gray-100 text-sm overflow-hidden">
 
@@ -270,6 +374,7 @@ function Customers() {
             setShowPayment={setShowPayment}
             setShowCustomerModal={setShowCustomerModal}
             onExport={handleExport}
+            setShowCityReport={setShowCityReport}
           />
 
           {stats && <CustomersStats stats={stats} />}
@@ -304,6 +409,48 @@ function Customers() {
   data={selectedSale}
   onClose={() => setShowSaleModal(false)}
 />
+{showCityReport && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in fade-in zoom-in duration-200">
+
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800">
+          City Summary Report
+        </h2>
+
+        <button
+          onClick={() => setShowCityReport(false)}
+          className="text-gray-400 hover:text-red-500 text-xl"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700">
+            Enter City
+          </label>
+
+          <input
+            type="text"
+            value={cityReportCity}
+            onChange={(e) => setCityReportCity(e.target.value)}
+            placeholder="e.g. Charsadda"
+            className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+          />
+        </div>
+
+        <button
+          onClick={handleCityReport}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold shadow"
+        >
+          Generate PDF
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         </div>
 
         {/* PAGINATION FIX */}
