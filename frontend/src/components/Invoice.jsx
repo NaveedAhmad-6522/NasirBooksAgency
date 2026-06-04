@@ -355,8 +355,7 @@ function Invoice({
               </tr>
 
               <tr>
-                <td className="py-1 text-gray-500">Grand Total</td>
-                <td className="py-1 text-right font-semibold">Rs {grandTotal.toLocaleString()}</td>
+                
               </tr> 
 
               <tr>
