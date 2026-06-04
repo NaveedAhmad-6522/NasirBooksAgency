@@ -47,6 +47,12 @@ export const getDashboardReport = async (req, res) => {
       WHERE ${effectiveDateCondition.replaceAll('created_at', 'sp.created_at')}
     `, params);
 
+    const [customerPayments] = await db.promise().query(`
+      SELECT IFNULL(SUM(amount), 0) AS totalCustomerPayments
+      FROM payments p
+      WHERE ${effectiveDateCondition.replaceAll('created_at', 'p.created_at')}
+    `, params);
+
 // 🔹 CUSTOMER RETURNS
 const [customerReturnsRows] = await db.promise().query(`
   SELECT IFNULL(SUM(amount), 0) as totalCustomerReturns
@@ -160,17 +166,23 @@ const totalProfit = Number(profitRows[0]?.totalProfit || 0);
       ? await db.promise().query(chartDataQuery, params)
       : [[]];
 
+    const totalReceived =
+      Number(sales[0].totalReceived || 0) +
+      Number(customerPayments[0].totalCustomerPayments || 0);
+
     const paymentFlow = {
-      received: Number(sales[0].totalReceived || 0),
+      received: totalReceived,
       paid: Number(payments[0].totalPaid || 0),
     };
 
-    const netCashFlow = (sales[0].totalReceived || 0) - (payments[0].totalPaid || 0);
+    const netCashFlow =
+      totalReceived -
+      Number(payments[0].totalPaid || 0);
 
     res.json({
       ordersCount: sales[0].ordersCount || 0,
       totalSales: sales[0].totalSales || 0,
-      totalReceived: sales[0].totalReceived || 0,
+      totalReceived,
       totalReceivable: Number(receivable[0].totalReceivable || 0),
       totalPaid: Number(payments[0].totalPaid || 0),
       customerReturns,
