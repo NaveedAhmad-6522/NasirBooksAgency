@@ -358,11 +358,7 @@ function Invoice({
                 
               </tr> 
 
-              <tr>
-                <td className="py-1 text-gray-500">Paid</td>
-                <td className="py-1 text-right">Rs {paidAmount.toLocaleString()}</td>
-              </tr>
-
+             
               {/* CUSTOMER BALANCE DETAILS */}
               {!isWalkIn && (
                 <tr>
@@ -385,6 +381,10 @@ function Invoice({
                   </td>
                 </tr>
               )}
+ <tr>
+                <td className="py-1 text-gray-500">Paid</td>
+                <td className="py-1 text-right">Rs {paidAmount.toLocaleString()}</td>
+              </tr>
 
               {!isWalkIn && (
                 <tr className="border-t">
