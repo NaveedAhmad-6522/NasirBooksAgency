@@ -1,9 +1,4 @@
 import db from "../config/db.js";
-const generateInvoiceNumber = () => {
-  const random = Math.floor(100 + Math.random() * 900);
-
-  return String(random);
-};
 export const createSale = (req, res) => {
   let { customer_id, items, paid, paid_amount } = req.body;
   // ✅ FIX: normalize undefined to null
@@ -29,7 +24,6 @@ export const createSale = (req, res) => {
 
   // ⚠️ Do NOT calculate remaining here; handled after knowing customer type
   let remaining = 0;
-  const invoiceNumber = generateInvoiceNumber();
   // 🔥 GET WALK-IN IF NEEDED
   const getCustomerId = (callback) => {
     if (customer_id) return callback(customer_id);
@@ -68,8 +62,12 @@ export const createSale = (req, res) => {
 
     connection.beginTransaction((err) => {
       if (err) {
+        console.error("TRANSACTION START ERROR:", err);
+      
         connection.release();
-        return res.status(500).json({ error: "Transaction failed" });
+        return res.status(500).json({
+          error: "Transaction failed"
+        });
       }
 
       getCustomerId((finalCustomerId) => {
@@ -80,6 +78,7 @@ export const createSale = (req, res) => {
           [finalCustomerId],
           (err, customerRes) => {
             if (err || !customerRes.length) {
+              console.error("CUSTOMER CHECK ERROR:", err);
               return connection.rollback(() => {
                 connection.release();
                 return res.status(500).json({ error: "Customer check failed" });
@@ -100,20 +99,33 @@ export const createSale = (req, res) => {
           // ✅ WALK-IN SALES SHOULD ALWAYS CREATE NEW INVOICE
           if (isWalkIn) {
             return connection.query(
-              "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number) VALUES (?, ?, ?, ?)",
-              [finalCustomerId, total, paidValue, invoiceNumber],
-              (err, saleResult) => {
-
-                if (err) {
+              `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales`,
+              (invErr, invRows) => {
+                if (invErr) {
                   return connection.rollback(() => {
                     connection.release();
-                    return res.status(500).json({
-                      error: "Walk-in sale failed"
-                    });
+                    return res.status(500).json({ error: "Invoice generation failed" });
                   });
                 }
 
-                return continueSaleProcess(saleResult.insertId);
+                const nextInvoice = String(invRows[0].nextInvoice);
+
+                connection.query(
+                  "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number) VALUES (?, ?, ?, ?)",
+                  [finalCustomerId, total, paidValue, nextInvoice],
+                  (err, saleResult) => {
+                    if (err) {
+                      return connection.rollback(() => {
+                        connection.release();
+                        return res.status(500).json({
+                          error: "Walk-in sale failed"
+                        });
+                      });
+                    }
+
+                    return continueSaleProcess(saleResult.insertId, nextInvoice);
+                  }
+                );
               }
             );
           }
@@ -121,7 +133,7 @@ export const createSale = (req, res) => {
           // ✅ ALWAYS CREATE NEW INVOICE
           // 🔥 FIND TODAY'S EXISTING CUSTOMER INVOICE
           connection.query(
-            `SELECT id, total_amount, paid_amount
+            `SELECT id, total_amount, paid_amount, invoice_number
            FROM sales
            WHERE customer_id = ?
            AND DATE(created_at) = CURDATE()
@@ -131,7 +143,8 @@ export const createSale = (req, res) => {
             (findErr, existingSales) => {
 
               if (findErr) {
-                return connection.rollback(() => {
+                console.error("SALE LOOKUP ERROR:", findErr);     
+                           return connection.rollback(() => {
                   connection.release();
                   return res.status(500).json({ error: "Sale lookup failed" });
                 });
@@ -156,35 +169,55 @@ export const createSale = (req, res) => {
                   [updatedTotal, updatedPaid, existingSale.id],
                   (updateErr) => {
                     if (updateErr) {
+                      console.error("SALE MERGE ERROR:", updateErr);
                       return connection.rollback(() => {
                         connection.release();
                         return res.status(500).json({ error: "Sale merge failed" });
                       });
                     }
 
-                    continueSaleProcess(existingSale.id);
+                    continueSaleProcess(
+                      existingSale.id,
+                      existingSale.invoice_number
+                    );
                   }
                 );
               }
 
               // ✅ CREATE NEW INVOICE IF NONE EXISTS TODAY
               connection.query(
-                "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number) VALUES (?, ?, ?, ?)",
-                [finalCustomerId, total, paidValue, invoiceNumber],
-                (err, saleResult) => {
-                  if (err) {
+                `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales`,
+                (invErr, invRows) => {
+                  if (invErr) {
                     return connection.rollback(() => {
                       connection.release();
-                      return res.status(500).json({ error: "Sale failed" });
+                      return res.status(500).json({ error: "Invoice generation failed" });
                     });
                   }
 
-                  continueSaleProcess(saleResult.insertId);
+                  const nextInvoice = String(invRows[0].nextInvoice);
+
+                  connection.query(
+                    "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number) VALUES (?, ?, ?, ?)",
+                    [finalCustomerId, total, paidValue, nextInvoice],
+                    (err, saleResult) => {
+                      if (err) {
+                        console.error("SALE ERROR:", err);
+                      
+                        return connection.rollback(() => {
+                          connection.release();
+                          return res.status(500).json({ error: "Sale failed" });
+                        });
+                      }
+
+                      continueSaleProcess(saleResult.insertId, nextInvoice);
+                    }
+                  );
                 }
               );
             }
           );
-          function continueSaleProcess(saleId) {
+          function continueSaleProcess(saleId, generatedInvoiceNumber = null) {
 
             // 2️⃣ INSERT OR MERGE ITEMS INTO SAME DAILY INVOICE
             const saveItems = (index = 0) => {
@@ -210,6 +243,8 @@ export const createSale = (req, res) => {
                 (metaErr, metaRows) => {
 
                   if (metaErr) {
+                    console.error("BOOK SNAPSHOT ERROR:", metaErr);
+                
                     return connection.rollback(() => {
                       connection.release();
                       return res.status(500).json({
@@ -217,7 +252,7 @@ export const createSale = (req, res) => {
                       });
                     });
                   }
-
+                
                   const snapshot = metaRows[0] || {};
 
                   // 🔥 CHECK IF BOOK ALREADY EXISTS IN THIS SALE
@@ -344,6 +379,7 @@ export const createSale = (req, res) => {
                 (stockErr, stockRows) => {
 
                   if (stockErr) {
+                    console.error("STOCK LOCK ERROR:", stockErr);
                     return connection.rollback(() => {
                       connection.release();
                       return res.status(500).json({ error: "Stock lock failed" });
@@ -406,7 +442,7 @@ export const createSale = (req, res) => {
                   return res.json({
                     message: "Sale completed",
                     sale_id: saleId,
-                    invoice_number: invoiceNumber,
+                    invoice_number: generatedInvoiceNumber,
                     total,
                     paid: paidValue,
                     remaining,
@@ -417,7 +453,7 @@ export const createSale = (req, res) => {
 
               // 🔽 NORMAL CUSTOMER FLOW
               connection.query(
-                "SELECT balance FROM customers WHERE id = ?",
+                "SELECT balance FROM customers WHERE id = ? FOR UPDATE",
                 [finalCustomerId],
                 (err, result) => {
                   if (err) {
@@ -452,12 +488,9 @@ export const createSale = (req, res) => {
 
                         connection.release();
                         res.json({
-
                           message: "Sale completed",
-
                           sale_id: saleId,
-
-                          invoice_number: invoiceNumber,
+                          invoice_number: generatedInvoiceNumber,
                           total,
                           paid: paidValue,
                           remaining,

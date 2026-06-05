@@ -306,6 +306,8 @@ function POS() {
         payment_method: "cash",
         paid: finalPaid,
       });
+
+      console.log('SALE RESPONSE:', res);
   
       if (customer) {
         setCustomer((prev) => ({
