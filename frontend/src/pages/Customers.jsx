@@ -121,6 +121,18 @@ function Customers() {
   ========================= */
   const handleAddCustomer = async () => {
     try {
+      const normalizedPhone = (newCustomer.phone || "").trim();
+
+      const existingCustomer = customers.find(
+        (c) => (c.phone || "").trim() === normalizedPhone
+      );
+
+      if (normalizedPhone && existingCustomer) {
+        alert(
+          `Customer already exists: ${existingCustomer.name} (${existingCustomer.phone})`
+        );
+        return;
+      }
       await fetch(`${API}/api/customers`, {
         method: "POST",
         headers: authHeaders(),

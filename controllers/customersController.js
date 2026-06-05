@@ -104,35 +104,66 @@ export const createCustomer = (req, res) => {
 
   // 🔧 CLEAN DATA
   name = name.trim();
-  phone = phone || null;
+  phone = phone ? phone.trim() : null;
   city = city || null;
   balance = Number(balance) || 0;
 
-  const sql = `
-    INSERT INTO customers (name, phone, city, balance)
-    VALUES (?, ?, ?, ?)
-  `;
+  const createCustomerRecord = () => {
+    const sql = `
+      INSERT INTO customers (name, phone, city, balance)
+      VALUES (?, ?, ?, ?)
+    `;
 
-  db.query(sql, [name, phone, city, balance], (err, result) => {
-    if (err) {
-      console.error("Insert Error:", err);
-      return res.status(500).json({ error: "Failed to create customer" });
-    }
+    db.query(sql, [name, phone, city, balance], (err, result) => {
+      if (err) {
+        console.error("Insert Error:", err);
 
-    // 🔥 RETURN CREATED CUSTOMER
-    db.query(
-      "SELECT * FROM customers WHERE id = ?",
-      [result.insertId],
-      (err2, rows) => {
-        if (err2) {
-          console.error("Fetch Error:", err2);
-          return res.status(500).json({ error: "Fetch failed" });
+        if (err.code === "ER_DUP_ENTRY") {
+          return res.status(409).json({
+            message: "Customer with this phone number already exists"
+          });
         }
 
-        res.json(rows[0]);
+        return res.status(500).json({ error: "Failed to create customer" });
       }
-    );
-  });
+
+      db.query(
+        "SELECT * FROM customers WHERE id = ?",
+        [result.insertId],
+        (err2, rows) => {
+          if (err2) {
+            console.error("Fetch Error:", err2);
+            return res.status(500).json({ error: "Fetch failed" });
+          }
+
+          res.json(rows[0]);
+        }
+      );
+    });
+  };
+
+  if (!phone) {
+    return createCustomerRecord();
+  }
+
+  db.query(
+    "SELECT id, name FROM customers WHERE phone = ? LIMIT 1",
+    [phone],
+    (checkErr, existingRows) => {
+      if (checkErr) {
+        console.error(checkErr);
+        return res.status(500).json({ error: "Customer validation failed" });
+      }
+
+      if (existingRows.length) {
+        return res.status(409).json({
+          message: `Customer already exists: ${existingRows[0].name}`
+        });
+      }
+
+      createCustomerRecord();
+    }
+  );
 };
 
 
@@ -1273,46 +1304,78 @@ export const updateCustomer = (req, res) => {
   }
 
   name = name.trim();
-  phone = phone || null;
+  phone = phone ? phone.trim() : null;
   city = city || null;
   address = address || null;
 
-  db.query(
-    `UPDATE customers
-     SET
-       name = ?,
-       phone = ?,
-       city = ?,
-       address = ?
-     WHERE id = ?`,
-    [name, phone, city, address, id],
-    (err) => {
-      if (err) {
-        console.error("Update Customer Error:", err);
-        return res.status(500).json({
-          error: "Failed to update customer",
-        });
-      }
+  const runUpdate = () => {
+    db.query(
+      `UPDATE customers
+       SET
+         name = ?,
+         phone = ?,
+         city = ?,
+         address = ?
+       WHERE id = ?`,
+      [name, phone, city, address, id],
+      (err) => {
+        if (err) {
+          console.error("Update Customer Error:", err);
 
-      db.query(
-        `SELECT id, name, phone, city, address, balance
-         FROM customers
-         WHERE id = ?`,
-        [id],
-        (err2, rows) => {
-          if (err2) {
-            console.error(err2);
-            return res.status(500).json({
-              error: "Customer updated but fetch failed",
+          if (err.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+              message: "Customer with this phone number already exists"
             });
           }
 
-          res.json({
-            success: true,
-            customer: rows[0],
+          return res.status(500).json({
+            error: "Failed to update customer",
           });
         }
-      );
+
+        db.query(
+          `SELECT id, name, phone, city, address, balance
+           FROM customers
+           WHERE id = ?`,
+          [id],
+          (err2, rows) => {
+            if (err2) {
+              console.error(err2);
+              return res.status(500).json({
+                error: "Customer updated but fetch failed",
+              });
+            }
+
+            res.json({
+              success: true,
+              customer: rows[0],
+            });
+          }
+        );
+      }
+    );
+  };
+
+  if (!phone) {
+    return runUpdate();
+  }
+
+  db.query(
+    "SELECT id, name FROM customers WHERE phone = ? AND id <> ? LIMIT 1",
+    [phone, id],
+    (checkErr, existingRows) => {
+      if (checkErr) {
+        console.error(checkErr);
+        return res.status(500).json({ error: "Customer validation failed" });
+      }
+
+      if (existingRows.length) {
+        return res.status(409).json({
+          message: `Customer already exists: ${existingRows[0].name}`
+        });
+      }
+
+      runUpdate();
     }
   );
 };
