@@ -156,12 +156,7 @@ function Invoice({
   const currentCustomerBalance = Number(
     mode === "pos"
       ? updated_balance
-      : (
-          sale?.customer_balance ||
-          customerInfo?.balance ||
-          customerData?.balance ||
-          0
-        )
+      : (sale?.customer_balance || 0)
   );
 
   // 🔥 backend-calculated previous balance
