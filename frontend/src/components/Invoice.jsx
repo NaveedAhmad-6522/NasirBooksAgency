@@ -156,7 +156,15 @@ function Invoice({
   const currentCustomerBalance = Number(
     mode === "pos"
       ? updated_balance
-      : (sale?.customer_balance || 0)
+      : (
+          Number(sale?.customer_balance || 0) > 0
+            ? sale.customer_balance
+            : (
+                customerInfo?.balance ||
+                customerData?.balance ||
+                0
+              )
+        )
   );
 
   // 🔥 backend-calculated previous balance
@@ -164,9 +172,12 @@ function Invoice({
     mode === "pos"
       ? previous_balance
       : (
-          sale?.previous_balance ||
-          data?.previous_balance ||
-          0
+          Number(sale?.customer_balance || 0) > 0
+            ? (sale?.previous_balance || 0)
+            : Math.max(
+                (customerInfo?.balance || customerData?.balance || 0) - netTotal,
+                0
+              )
         )
   );
 
