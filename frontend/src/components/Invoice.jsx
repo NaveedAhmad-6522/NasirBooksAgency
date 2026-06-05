@@ -157,13 +157,10 @@ function Invoice({
     mode === "pos"
       ? updated_balance
       : (
-          Number(sale?.customer_balance || 0) > 0
-            ? sale.customer_balance
-            : (
-                customerInfo?.balance ||
-                customerData?.balance ||
-                0
-              )
+          sale?.customer_balance ||
+          customerInfo?.balance ||
+          customerData?.balance ||
+          0
         )
   );
 
@@ -172,12 +169,9 @@ function Invoice({
     mode === "pos"
       ? previous_balance
       : (
-          Number(sale?.customer_balance || 0) > 0
-            ? (sale?.previous_balance || 0)
-            : Math.max(
-                (customerInfo?.balance || customerData?.balance || 0) - netTotal,
-                0
-              )
+          sale?.previous_balance ||
+          data?.previous_balance ||
+          0
         )
   );
 
@@ -377,32 +371,16 @@ function Invoice({
                 </tr>
               )}
 
-{!isWalkIn && (
-  <>
-<tr className="border-b border-gray-400">
-  <td className="py-1 text-gray-500">Current Invoice</td>
-  <td className="py-1 text-right">
-    Rs {netTotal.toLocaleString()}
-  </td>
-</tr>
-
-    <tr>
-      <td className="py-1 text-gray-500">Total Due</td>
-      <td className="py-1 text-right font-medium">
-        Rs {(previousBalance + netTotal).toLocaleString()}
-      </td>
-    </tr>
-  </>
-)}
-
-{isWalkIn && remaining > 0 && (
-  <tr>
-    <td className="py-1 text-gray-500">Remaining</td>
-    <td className="py-1 text-right text-red-600 font-medium">
-      Rs {remaining.toLocaleString()}
-    </td>
-  </tr>
-)}
+              {remaining > 0 && (
+                <tr>
+                  <td className="py-1 text-gray-500">
+                    {isWalkIn ? "Remaining" : "Current Invoice Due"}
+                  </td>
+                  <td className="py-1 text-right text-red-600 font-medium">
+                    Rs {remaining.toLocaleString()}
+                  </td>
+                </tr>
+              )}
  <tr>
                 <td className="py-1 text-gray-500">Paid</td>
                 <td className="py-1 text-right">Rs {paidAmount.toLocaleString()}</td>
