@@ -335,7 +335,21 @@ function Invoice({
         </div>
 
         {/* TOTALS */}
-        <div className="flex justify-end">
+        <div className="flex justify-between items-start gap-4 mt-2">
+
+          {/* IMPORTANT NOTICE */}
+          <div className="flex-1 p-2 border border-gray-300 rounded text-[10px] leading-relaxed text-right bg-gray-50">
+            <div className="font-semibold mb-1">اہم نوٹ:</div>
+            <div>
+              خیبر پختونخوا ٹیکسٹ بک بورڈ کی کتابیں واپس نہیں ہوں گی۔
+            </div>
+            <div>
+              ڈیمانڈ کے مطابق کتابیں منگوائیں، مہربانی ہوگی۔
+            </div>
+            <div>
+              بل میں کسی بھی قسم کے مسئلے کی صورت میں ایک ہفتے کے اندر رابطہ کریں، بصورت دیگر ناصر بک ایجنسی ذمہ دار نہیں ہوگی۔
+            </div>
+          </div>
           <table className="w-[250px] text-[10px] mt-1">
             <tbody>
 
