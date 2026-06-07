@@ -147,7 +147,14 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed");
+        const errorMessage = data?.error || data?.message || "Failed";
+
+        if (errorMessage.toLowerCase().includes("already exists")) {
+          alert("This book already exists.");
+          return;
+        }
+
+        throw new Error(errorMessage);
       }
 
       alert(existingBook ? "Book Updated Successfully" : "Book Added Successfully");

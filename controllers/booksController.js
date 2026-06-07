@@ -35,23 +35,46 @@ export const addBook = (req, res) => {
     return res.status(400).json({ error: "Title is required" });
   }
 
-  if (barcode) {
-    return db.query(
-      "SELECT id FROM books WHERE barcode = ?",
-      [barcode],
-      (err, existing) => {
-        if (err) return res.status(500).json({ error: "Barcode check failed" });
-        if (existing.length) {
-          return res.status(400).json({ error: "Barcode already exists" });
-        }
-
-        // continue normal flow
-        proceedAddBook();
+  // Prevent duplicate books (same title + publisher + edition)
+  db.query(
+    `
+    SELECT id
+    FROM books
+    WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
+      AND LOWER(TRIM(IFNULL(publisher, ''))) = LOWER(TRIM(?))
+      AND LOWER(TRIM(IFNULL(edition, ''))) = LOWER(TRIM(?))
+    LIMIT 1
+    `,
+    [title, publisher, edition],
+    (err, existingBooks) => {
+      if (err) {
+        return res.status(500).json({ error: "Duplicate check failed" });
       }
-    );
-  } else {
-    proceedAddBook();
-  }
+
+      if (existingBooks.length > 0) {
+        return res.status(400).json({ error: "Book already exists" });
+      }
+
+      if (barcode) {
+        return db.query(
+          "SELECT id FROM books WHERE barcode = ?",
+          [barcode],
+          (err, existing) => {
+            if (err) return res.status(500).json({ error: "Barcode check failed" });
+            if (existing.length) {
+              return res.status(400).json({ error: "Barcode already exists" });
+            }
+
+            proceedAddBook();
+          }
+        );
+      }
+
+      proceedAddBook();
+    }
+  );
+
+  return;
 
   function proceedAddBook() {
     if (!supplier_id || purchase_price <= 0 || stock <= 0) {
