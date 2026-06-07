@@ -25,3 +25,20 @@ dist-ssr
 .env
 node_modules
 dist
+# Node dependencies
+
+node_modules/
+
+frontend/node_modules/
+
+# Build output
+
+frontend/dist/
+
+# Logs
+
+*.log
+
+# OS files
+
+.DS_Store
