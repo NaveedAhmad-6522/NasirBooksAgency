@@ -384,7 +384,7 @@ export const getCustomerLedger = (req, res) => {
       const totalsSql = `
         SELECT 
           SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) AS debit,
-          SUM(CASE WHEN type IN ('payment','return') THEN amount ELSE 0 END) AS credit
+          SUM(CASE WHEN type IN ('payment','sale_payment','return') THEN amount ELSE 0 END) AS credit
         FROM (
           SELECT total_amount AS amount, 'sale' AS type FROM sales WHERE customer_id = ?
           UNION ALL
@@ -420,11 +420,31 @@ export const getCustomerLedger = (req, res) => {
             const totals = totalsResult[0] || {};
             const totalRecords = countResult[0]?.total || 0;
 
-            // Ledger is already stored historically by rebuildCustomerLedger.
-            // Start from zero and calculate true chronological balances.
-            let running = 0;
+            const debit = Number(totals.debit || 0);
+            const credit = Number(totals.credit || 0);
+            const currentBalance = Number(customer.balance || 0);
 
-            const calculated = ledger.map(e => {
+            // Recover historical opening balance.
+            // Opening + Debits - Credits = Current Balance
+            const openingBalance = Number(
+              (currentBalance - (debit - credit)).toFixed(2)
+            );
+
+            let running = openingBalance;
+
+            const calculated = [];
+
+            if (Math.abs(openingBalance) > 0.009) {
+              calculated.push({
+                id: 'opening',
+                type: 'opening',
+                amount: openingBalance,
+                created_at: null,
+                balance: Number(openingBalance.toFixed(2))
+              });
+            }
+
+            for (const e of ledger) {
               const amt = Number(e.amount || 0);
 
               if (e.type === 'sale') {
@@ -437,12 +457,12 @@ export const getCustomerLedger = (req, res) => {
                 running -= amt;
               }
 
-              return {
+              calculated.push({
                 ...e,
                 amount: amt,
                 balance: Number(running.toFixed(2))
-              };
-            });
+              });
+            }
 
             const fullLedger = calculated.reverse();
 
