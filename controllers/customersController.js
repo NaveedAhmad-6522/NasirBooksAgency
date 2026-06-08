@@ -29,7 +29,7 @@ async function rebuildCustomerLedger(customerId) {
         );
 
         const ledgerSql = `
-          SELECT * FROM (
+          SELECT id, amount, created_at, type FROM (
             SELECT
               id,
               total_amount AS amount,
@@ -98,23 +98,33 @@ async function rebuildCustomerLedger(customerId) {
 
         const finalBalance = Number(runningBalance.toFixed(2));
 
+        if (saleUpdates.length === 0) {
+          await connection.query(
+            'UPDATE customers SET balance = ? WHERE id = ?',
+            [finalBalance, customerId]
+          );
+
+          await connection.commit();
+          innerResolve(finalBalance);
+          return;
+        }
+
         await connection.query(
           'UPDATE customers SET balance = ? WHERE id = ?',
           [finalBalance, customerId]
         );
 
+        const updateSql = `UPDATE sales
+          SET previous_balance = ?,
+              customer_balance = ?
+          WHERE id = ?`;
+
         for (const sale of saleUpdates) {
-          await connection.query(
-            `UPDATE sales
-             SET previous_balance = ?,
-                 customer_balance = ?
-             WHERE id = ?`,
-            [
-              sale.previousBalance,
-              sale.customerBalance,
-              sale.saleId,
-            ]
-          );
+          await connection.query(updateSql, [
+            sale.previousBalance,
+            sale.customerBalance,
+            sale.saleId,
+          ]);
         }
 
         await connection.commit();
