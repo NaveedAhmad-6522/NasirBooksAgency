@@ -1,5 +1,142 @@
 import db from "../config/db.js";
 
+// In-memory rebuild lock map
+const customerLedgerRebuildLocks = new Map();
+
+// Helper function to rebuild customer ledger and update balances in sales and customers
+async function rebuildCustomerLedger(customerId) {
+  // Ledger rebuild lock: prevent concurrent rebuilds for same customer
+  if (customerLedgerRebuildLocks.has(customerId)) {
+    return customerLedgerRebuildLocks.get(customerId);
+  }
+
+  // The actual transactional rebuild logic is inside this inner Promise
+  const rebuildPromise = new Promise((innerResolve, innerReject) => {
+    db.query('START TRANSACTION', (txErr) => {
+      if (txErr) return innerReject(txErr);
+
+      const ledgerSql = `
+        SELECT * FROM (
+          SELECT
+            id,
+            total_amount AS amount,
+            created_at,
+            'sale' AS type
+          FROM sales
+          WHERE customer_id = ?
+
+          UNION ALL
+
+          SELECT
+            id,
+            amount,
+            created_at,
+            'payment' AS type
+          FROM payments
+          WHERE customer_id = ?
+
+          UNION ALL
+
+          SELECT
+            id,
+            amount,
+            created_at,
+            'return' AS type
+          FROM customer_returns
+          WHERE customer_id = ?
+
+          UNION ALL
+
+          SELECT
+            id,
+            paid_amount AS amount,
+            created_at,
+            'payment' AS type
+          FROM sales
+          WHERE customer_id = ?
+            AND paid_amount > 0
+        ) x
+        ORDER BY created_at ASC, id ASC
+      `;
+
+      db.query(
+        ledgerSql,
+        [customerId, customerId, customerId, customerId],
+        (err, ledgerRows) => {
+          if (err) return db.query('ROLLBACK', () => innerReject(err));
+
+          let runningBalance = 0;
+          const saleUpdates = [];
+
+          for (const row of ledgerRows) {
+            const amount = Number(row.amount || 0);
+
+            if (row.type === 'sale') {
+              const previousBalance = runningBalance;
+              runningBalance += amount;
+
+              saleUpdates.push({
+                saleId: row.id,
+                previousBalance,
+                customerBalance: runningBalance,
+              });
+            } else {
+              runningBalance -= amount;
+            }
+          }
+
+          const finalBalance = Number(runningBalance.toFixed(2));
+
+          db.query(
+            'UPDATE customers SET balance = ? WHERE id = ?',
+            [finalBalance, customerId],
+            (err2) => {
+              if (err2) return db.query('ROLLBACK', () => innerReject(err2));
+
+              const updateNext = (index) => {
+                if (index >= saleUpdates.length) {
+                  return db.query('COMMIT', (commitErr) => {
+                    if (commitErr) {
+                      return db.query('ROLLBACK', () => innerReject(commitErr));
+                    }
+                    return innerResolve(finalBalance);
+                  });
+                }
+
+                const sale = saleUpdates[index];
+
+                db.query(
+                  `UPDATE sales
+                   SET previous_balance = ?,
+                       customer_balance = ?
+                   WHERE id = ?`,
+                  [
+                    sale.previousBalance,
+                    sale.customerBalance,
+                    sale.saleId,
+                  ],
+                  (err3) => {
+                    if (err3) return db.query('ROLLBACK', () => innerReject(err3));
+                    updateNext(index + 1);
+                  }
+                );
+              };
+
+              updateNext(0);
+            }
+          );
+        }
+      );
+    });
+  });
+
+  customerLedgerRebuildLocks.set(customerId, rebuildPromise);
+  rebuildPromise.finally(() => {
+    customerLedgerRebuildLocks.delete(customerId);
+  });
+  return rebuildPromise;
+}
+
 // IMPORTANT DATABASE SAFETY:
 // Run once in MySQL:
 // ALTER TABLE sale_items
@@ -372,9 +509,11 @@ export const getCustomerStats = (req, res) => {
 
 export const updateLedgerTransaction = (req, res) => {
   const { id } = req.params;
-  const { type, amount } = req.body;
+  const { type, amount, newAmount } = req.body;
 
-  const newAmount = Number(amount || 0);
+  const updatedAmount = Number(
+    newAmount ?? amount ?? 0
+  );
 
   if (!type) {
     return res.status(400).json({ error: "Transaction type required" });
@@ -398,33 +537,29 @@ export const updateLedgerTransaction = (req, res) => {
         }
 
         const payment = rows[0];
-        const oldAmount = Number(payment.amount || 0);
-        const diff = newAmount - oldAmount;
+        const customerId = payment.customer_id;
 
         db.query(
           "UPDATE payments SET amount = ? WHERE id = ?",
-          [newAmount, id],
+          [updatedAmount, id],
           (err2) => {
             if (err2) {
               console.error(err2);
               return res.status(500).json({ error: "Payment update failed" });
             }
 
-            db.query(
-              "UPDATE customers SET balance = balance - ? WHERE id = ?",
-              [diff, payment.customer_id],
-              (err3) => {
-                if (err3) {
-                  console.error(err3);
-                  return res.status(500).json({ error: "Balance update failed" });
-                }
-
+            rebuildCustomerLedger(customerId)
+              .then((newBalance) => {
                 return res.json({
                   success: true,
-                  message: "Payment updated successfully"
+                  message: "Payment updated successfully",
+                  customer_balance: newBalance
                 });
-              }
-            );
+              })
+              .catch((e) => {
+                console.error(e);
+                return res.status(500).json({ error: "Ledger rebuild failed" });
+              });
           }
         );
       }
@@ -531,33 +666,29 @@ export const updateLedgerTransaction = (req, res) => {
                         if (completed === sanitizedItems.length) {
                           const diff = newTotal - oldAmount;
 
-                          db.query(
-                            "UPDATE sales SET total_amount = ? WHERE id = ?",
-                            [newTotal, id],
-                            (err3) => {
-                              if (err3) {
-                                console.error(err3);
-                                return res.status(500).json({ error: "Sale total update failed" });
-                              }
-
                               db.query(
-                                "UPDATE customers SET balance = balance + ? WHERE id = ?",
-                                [diff, sale.customer_id],
-                                (err4) => {
-                                  if (err4) {
-                                    console.error(err4);
-                                    return res.status(500).json({ error: "Balance update failed" });
+                                "UPDATE sales SET total_amount = ? WHERE id = ?",
+                                [newTotal, id],
+                                (err3) => {
+                                  if (err3) {
+                                    console.error(err3);
+                                    return res.status(500).json({ error: "Sale total update failed" });
                                   }
 
-                                  return res.json({
-                                    success: true,
-                                    message: "Invoice updated successfully",
-                                    total: newTotal
-                                  });
+                                  rebuildCustomerLedger(sale.customer_id)
+                                    .then(() => {
+                                      return res.json({
+                                        success: true,
+                                        message: "Invoice updated successfully",
+                                        total: newTotal
+                                      });
+                                    })
+                                    .catch((e) => {
+                                      console.error(e);
+                                      return res.status(500).json({ error: "Ledger rebuild failed" });
+                                    });
                                 }
                               );
-                            }
-                          );
                         }
                       }
                     );
@@ -681,22 +812,18 @@ export const updateLedgerTransaction = (req, res) => {
                                       return res.status(500).json({ error: "Sale total update failed" });
                                     }
 
-                                    db.query(
-                                      "UPDATE customers SET balance = balance + ? WHERE id = ?",
-                                      [diff, sale.customer_id],
-                                      (err4) => {
-                                        if (err4) {
-                                          console.error(err4);
-                                          return res.status(500).json({ error: "Balance update failed" });
-                                        }
-
+                                    rebuildCustomerLedger(sale.customer_id)
+                                      .then(() => {
                                         return res.json({
                                           success: true,
                                           message: "Invoice updated successfully",
                                           total: newTotal
                                         });
-                                      }
-                                    );
+                                      })
+                                      .catch((e) => {
+                                        console.error(e);
+                                        return res.status(500).json({ error: "Ledger rebuild failed" });
+                                      });
                                   }
                                 );
                               }
@@ -737,32 +864,28 @@ export const updateLedgerTransaction = (req, res) => {
 
         const ret = rows[0];
         const oldAmount = Number(ret.amount || 0);
-        const diff = newAmount - oldAmount;
+        const diff = updatedAmount - oldAmount;
 
         db.query(
           "UPDATE customer_returns SET amount = ? WHERE id = ?",
-          [newAmount, id],
+          [updatedAmount, id],
           (err2) => {
             if (err2) {
               console.error(err2);
               return res.status(500).json({ error: "Return update failed" });
             }
 
-            db.query(
-              "UPDATE customers SET balance = balance - ? WHERE id = ?",
-              [diff, ret.customer_id],
-              (err3) => {
-                if (err3) {
-                  console.error(err3);
-                  return res.status(500).json({ error: "Balance update failed" });
-                }
-
+            rebuildCustomerLedger(ret.customer_id)
+              .then(() => {
                 return res.json({
                   success: true,
                   message: "Return updated successfully"
                 });
-              }
-            );
+              })
+              .catch((e) => {
+                console.error(e);
+                return res.status(500).json({ error: "Ledger rebuild failed" });
+              });
           }
         );
       }
@@ -796,21 +919,17 @@ export const addPayment = (req, res) => {
       return res.status(500).json({ error: "Insert failed" });
     }
 
-    // 2️⃣ UPDATE CUSTOMER BALANCE
-    db.query(
-      "UPDATE customers SET balance = balance - ? WHERE id = ?",
-      [amount, customer_id],
-      (err) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json(err);
-        }
-
+    // Rebuild customer ledger after payment insert
+    rebuildCustomerLedger(customer_id)
+      .then(() => {
         res.json({
-          message: "Payment added successfully",
+          message: 'Payment added successfully'
         });
-      }
-    );
+      })
+      .catch((e) => {
+        console.error(e);
+        return res.status(500).json({ error: 'Ledger rebuild failed' });
+      });
   });
 };
 
@@ -1140,7 +1259,6 @@ export const addCustomerReturn = (req, res) => {
     // 3) FINALIZE INVOICE AFTER LOOP
     // =======================================================
     if (index >= items.length) {
-
       // 🔥 CREATE / UPDATE SINGLE INVOICE HERE
       db.query(
         `SELECT id, items FROM customer_returns 
@@ -1152,6 +1270,22 @@ export const addCustomerReturn = (req, res) => {
             console.error(err);
             return res.status(500).json({ error: "Return fetch failed" });
           }
+
+          const finishAndRebuild = () => {
+            // After insert/update, always rebuild the ledger (await style)
+            rebuildCustomerLedger(customer_id)
+              .then(() => {
+                // return customer_id in response for fallback customer info fetch
+                return res.json({ 
+                  message: "Return processed successfully",
+                  customer_id
+                });
+              })
+              .catch((e) => {
+                console.error(e);
+                return res.status(500).json({ error: "Ledger rebuild failed" });
+              });
+          };
 
           if (existing && existing.length) {
             let existingItems = [];
@@ -1174,22 +1308,18 @@ export const addCustomerReturn = (req, res) => {
               `UPDATE customer_returns 
                SET amount = amount + ?, items = ?
                WHERE id = ?`,
-              [totalReturnAmount, JSON.stringify(mergedItems), existing[0].id]
+              [totalReturnAmount, JSON.stringify(mergedItems), existing[0].id],
+              finishAndRebuild
             );
           } else {
             // NOTE: (previous dues handled in frontend using customer.balance before update)
             db.query(
               `INSERT INTO customer_returns (customer_id, amount, items)
                VALUES (?, ?, ?)`,
-              [customer_id, totalReturnAmount, JSON.stringify(returnItems)]
+              [customer_id, totalReturnAmount, JSON.stringify(returnItems)],
+              finishAndRebuild
             );
           }
-
-          // return customer_id in response for fallback customer info fetch
-          return res.json({ 
-            message: "Return processed successfully",
-            customer_id
-          });
         }
       );
       return;

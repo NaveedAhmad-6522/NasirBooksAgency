@@ -530,6 +530,7 @@ function CustomerLedgerPage({ onViewSale }) {
                     const isPayment = l.type === "payment";
                     const isReturn = l.type === "return";
                     const isOpening = l.type === "opening";
+                    const canEdit = isSale || isPayment;
                     const refLabel = isOpening
                       ? "OPENING"
                       : isReturn
@@ -713,9 +714,9 @@ function CustomerLedgerPage({ onViewSale }) {
                         <td className="p-3 text-center no-print">
                           {!isOpening && (
                             <button
-                              disabled={!isSale}
+                              disabled={!canEdit}
                               onClick={async () => {
-                                if (!isSale) return;
+                                if (!canEdit) return;
                                 try {
                                   setEditingTransaction(l);
                                   setEditAmount(l.amount || "");
@@ -773,6 +774,9 @@ function CustomerLedgerPage({ onViewSale }) {
                                     }, 0);
 
                                     setEditAmount(total.toFixed(2));
+                                  } else if (l.type === "payment") {
+                                    setSaleItems([]);
+                                    setEditAmount(Number(l.amount || 0).toString());
                                   } else {
                                     setSaleItems([]);
                                   }
@@ -781,12 +785,18 @@ function CustomerLedgerPage({ onViewSale }) {
                                   alert("Failed to load invoice details");
                                 }
                               }}
-                              title={isSale ? "Edit Sale" : "Editing disabled for this transaction"}
+                              title={
+                                isSale
+                                  ? "Edit Sale"
+                                  : isPayment
+                                    ? "Edit Payment"
+                                    : "Editing disabled for this transaction"
+                              }
                               className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border transition-all duration-200 shadow-sm
-  ${isSale
-                                  ? "border-gray-200 bg-white text-gray-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 hover:shadow-md hover:scale-105 active:scale-95"
-                                  : "border-gray-200 bg-gray-100 text-gray-300 cursor-not-allowed opacity-70"
-                                }
+  ${canEdit
+    ? "border-gray-200 bg-white text-gray-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 hover:shadow-md hover:scale-105 active:scale-95"
+    : "border-gray-200 bg-gray-100 text-gray-300 cursor-not-allowed opacity-70"
+  }
 `}
                             >
                               <Pencil size={15} strokeWidth={2.2} />
@@ -1006,9 +1016,11 @@ function CustomerLedgerPage({ onViewSale }) {
           <div className="w-full max-w-[1100px] rounded-[28px] bg-white shadow-[0_30px_100px_rgba(0,0,0,0.18)] overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-10">
               <div>
-                <div className="text-base font-semibold text-slate-900">
-                  Invoice #{editingTransaction.id}
-                </div>
+              <div className="text-base font-semibold text-slate-900">
+  {editingTransaction.type === "payment"
+    ? `Payment Entry #${editingTransaction.id}`
+    : `Invoice #${editingTransaction.id}`}
+</div>
               </div>
 
               <button
@@ -1020,30 +1032,61 @@ function CustomerLedgerPage({ onViewSale }) {
             </div>
             <div className="p-0 bg-white">
               <div className="bg-white overflow-hidden">
-                <div className="overflow-x-auto px-8 pt-6 pb-2">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-100 border-y border-gray-200 text-[11px] font-semibold text-gray-700 uppercase tracking-wide">
-                        <th className="px-4 py-3 text-left w-[50px]">#</th>
-                        <th className="px-4 py-3 text-left">Item</th>
-                        <th className="px-4 py-3 text-center w-[120px]">Qty</th>
-                        <th className="px-4 py-3 text-right w-[160px]">Unit Price</th>
-                        <th className="px-4 py-3 text-center w-[120px]">%</th>
-                        <th className="px-4 py-3 text-right w-[160px]">Disc Price</th>
-                        <th className="px-4 py-3 text-right w-[180px]">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {saleItems.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan="7"
-                            className="py-16 text-center text-gray-400 text-sm"
-                          >
-                            Loading invoice items...
-                          </td>
+
+                {editingTransaction.type === "payment" ? (
+                  <div className="px-10 py-8">
+                    <div className="max-w-lg mx-auto">
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6">
+                        <div className="text-center mb-6">
+                          <div className="text-sm text-gray-500">Current Payment</div>
+                          <div className="text-3xl font-bold text-green-700 mt-1">
+                            Rs {Number(editingTransaction.amount || 0).toLocaleString()}
+                          </div>
+                        </div>
+
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          New Payment Amount
+                        </label>
+
+                        <input
+                          type="number"
+                          min="0"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          className="w-full border-2 border-green-200 focus:border-green-500 rounded-xl p-4 text-xl font-semibold text-center"
+                        />
+
+                        <div className="mt-4 text-xs text-gray-500 text-center">
+                          This update will automatically recalculate the customer's ledger, balances and invoice history.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto px-8 pt-6 pb-2">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-y border-gray-200 text-[11px] font-semibold text-gray-700 uppercase tracking-wide">
+                          <th className="px-4 py-3 text-left w-[50px]">#</th>
+                          <th className="px-4 py-3 text-left">Item</th>
+                          <th className="px-4 py-3 text-center w-[120px]">Qty</th>
+                          <th className="px-4 py-3 text-right w-[160px]">Unit Price</th>
+                          <th className="px-4 py-3 text-center w-[120px]">%</th>
+                          <th className="px-4 py-3 text-right w-[160px]">Disc Price</th>
+                          <th className="px-4 py-3 text-right w-[180px]">Total</th>
                         </tr>
-                      ) : saleItems.map((item, index) => {
+                      </thead>
+                      <tbody>
+                        {saleItems.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan="7"
+                              className="py-16 text-center text-gray-400 text-sm"
+                            >
+                              Loading invoice items...
+                            </td>
+                          </tr>
+                        ) : saleItems.map((item, index) => {
                         // Use publisher/edition logic from Invoice.jsx
                         const price = Number(item.current_price || item.printed_price || item.price || 0);
                         const qty = Number(item.quantity || 0);
@@ -1171,11 +1214,14 @@ function CustomerLedgerPage({ onViewSale }) {
                             </td>
                           </tr>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
               </div>
+              
               <div className="flex justify-end gap-3 px-12 py-5 border-t border-gray-200">
                 <button
                   onClick={() => setEditingTransaction(null)}
@@ -1187,6 +1233,48 @@ function CustomerLedgerPage({ onViewSale }) {
                   disabled={savingEdit}
                   onClick={async () => {
                     try {
+                      if (editingTransaction.type === "payment") {
+                        const oldAmount = Number(editingTransaction.amount || 0);
+                        const newAmount = Number(editAmount || 0);
+
+                        if (newAmount <= 0) {
+                          alert("Please enter a valid payment amount");
+                          return;
+                        }
+
+                        const difference = newAmount - oldAmount;
+
+                        const confirmed = window.confirm(
+                          `Payment Update\n\nCurrent Amount: Rs ${oldAmount.toLocaleString()}\nNew Amount: Rs ${newAmount.toLocaleString()}\nDifference: Rs ${Math.abs(difference).toLocaleString()} ${difference >= 0 ? '(Increase)' : '(Decrease)'}\n\nThis will recalculate the customer's complete ledger and invoice balances.\n\nContinue?`
+                        );
+
+                        if (!confirmed) {
+                          return;
+                        }
+                        setSavingEdit(true);
+                        const res = await fetch(
+                          `${API_BASE}/api/customers/${id}/ledger/${editingTransaction.id}`,
+                          {
+                            method: "PUT",
+                            headers: authHeaders(true),
+                            body: JSON.stringify({
+                              type: "payment",
+                              amount: Number(editAmount),
+                              newAmount: Number(editAmount),
+                            }),
+                          }
+                        );
+                      
+                        const data = await res.json().catch(() => ({}));
+                      
+                        if (!res.ok) {
+                          throw new Error(data.error || "Update failed");
+                        }
+                      
+                        setEditingTransaction(null);
+                        fetchLedger();
+                        return;
+                      }
                       // Validation for empty saleItems
                       if (!saleItems.length) {
                         alert("No invoice items available");
