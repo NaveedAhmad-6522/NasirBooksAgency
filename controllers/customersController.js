@@ -19,6 +19,15 @@ async function rebuildCustomerLedger(customerId) {
         connection = await db.promise().getConnection();
         await connection.beginTransaction();
 
+        const [customerRows] = await connection.query(
+          `SELECT opening_balance FROM customers WHERE id = ?`,
+          [customerId]
+        );
+
+        let runningBalance = Number(
+          customerRows[0]?.opening_balance || 0
+        );
+
         const ledgerSql = `
           SELECT * FROM (
             SELECT
@@ -68,7 +77,6 @@ async function rebuildCustomerLedger(customerId) {
           [customerId, customerId, customerId, customerId]
         );
 
-        let runningBalance = 0;
         const saleUpdates = [];
 
         for (const row of ledgerRows) {
@@ -244,11 +252,26 @@ export const createCustomer = (req, res) => {
 
   const createCustomerRecord = () => {
     const sql = `
-      INSERT INTO customers (name, phone, city, balance)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO customers (
+        name,
+        phone,
+        city,
+        balance,
+        opening_balance
+      )
+      VALUES (?, ?, ?, ?, ?)
     `;
 
-    db.query(sql, [name, phone, city, balance], (err, result) => {
+    db.query(
+      sql,
+      [
+        name,
+        phone,
+        city,
+        balance,
+        balance
+      ],
+      (err, result) => {
       if (err) {
         console.error("Insert Error:", err);
 
@@ -273,7 +296,8 @@ export const createCustomer = (req, res) => {
           res.json(rows[0]);
         }
       );
-    });
+    }
+  );
   };
 
   if (!phone) {
@@ -311,7 +335,7 @@ export const getCustomerLedger = (req, res) => {
   const offset = (page - 1) * limit;
 
   db.query(
-    "SELECT name, phone, city, balance FROM customers WHERE id = ?",
+    "SELECT name, phone, city, balance, opening_balance FROM customers WHERE id = ?",
     [id],
     (err, customerResult) => {
       if (err) return res.status(500).json({ error: "Customer fetch failed" });
@@ -420,27 +444,16 @@ export const getCustomerLedger = (req, res) => {
             const totals = totalsResult[0] || {};
             const totalRecords = countResult[0]?.total || 0;
 
-            const debit = Number(totals.debit || 0);
-            const credit = Number(totals.credit || 0);
-            const currentBalance = Number(customer.balance || 0);
-
-            // Recover historical opening balance.
-            // Opening + Debits - Credits = Current Balance
-            const openingBalance = Number(
-              (currentBalance - (debit - credit)).toFixed(2)
-            );
-
-            let running = openingBalance;
-
+            let running = Number(customer.opening_balance || 0);
             const calculated = [];
 
-            if (Math.abs(openingBalance) > 0.009) {
+            if (Math.abs(running) > 0.009) {
               calculated.push({
                 id: 'opening',
+                amount: running,
                 type: 'opening',
-                amount: openingBalance,
                 created_at: null,
-                balance: Number(openingBalance.toFixed(2))
+                balance: Number(running.toFixed(2))
               });
             }
 
@@ -480,6 +493,7 @@ export const getCustomerLedger = (req, res) => {
                 total: totalRecords,
                 totalPages: Math.ceil(totalRecords / limit)
               },
+              opening_balance: Number(customer.opening_balance || 0),
               final_balance: Number(customer.balance || 0)
             });
           });
@@ -1429,7 +1443,7 @@ export const getCustomerById = (req, res) => {
   const { id } = req.params;
 
   db.query(
-    "SELECT id, name, phone, city, address, balance FROM customers WHERE id = ?",
+    "SELECT id, name, phone, city, address, balance, opening_balance FROM customers WHERE id = ?",
     [id],
     (err, result) => {
       if (err) {
@@ -1490,7 +1504,14 @@ export const updateCustomer = (req, res) => {
         }
 
         db.query(
-          `SELECT id, name, phone, city, address, balance
+          `SELECT
+             id,
+             name,
+             phone,
+             city,
+             address,
+             balance,
+             opening_balance
            FROM customers
            WHERE id = ?`,
           [id],
