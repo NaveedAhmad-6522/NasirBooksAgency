@@ -12,122 +12,119 @@ async function rebuildCustomerLedger(customerId) {
 
   // The actual transactional rebuild logic is inside this inner Promise
   const rebuildPromise = new Promise((innerResolve, innerReject) => {
-    db.query('START TRANSACTION', (txErr) => {
-      if (txErr) return innerReject(txErr);
+    (async () => {
+      let connection;
 
-      const ledgerSql = `
-        SELECT * FROM (
-          SELECT
-            id,
-            total_amount AS amount,
-            created_at,
-            'sale' AS type
-          FROM sales
-          WHERE customer_id = ?
+      try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
 
-          UNION ALL
+        const ledgerSql = `
+          SELECT * FROM (
+            SELECT
+              id,
+              total_amount AS amount,
+              created_at,
+              'sale' AS type
+            FROM sales
+            WHERE customer_id = ?
 
-          SELECT
-            id,
-            amount,
-            created_at,
-            'payment' AS type
-          FROM payments
-          WHERE customer_id = ?
+            UNION ALL
 
-          UNION ALL
+            SELECT
+              id,
+              amount,
+              created_at,
+              'payment' AS type
+            FROM payments
+            WHERE customer_id = ?
 
-          SELECT
-            id,
-            amount,
-            created_at,
-            'return' AS type
-          FROM customer_returns
-          WHERE customer_id = ?
+            UNION ALL
 
-          UNION ALL
+            SELECT
+              id,
+              amount,
+              created_at,
+              'return' AS type
+            FROM customer_returns
+            WHERE customer_id = ?
 
-          SELECT
-            id,
-            paid_amount AS amount,
-            created_at,
-            'payment' AS type
-          FROM sales
-          WHERE customer_id = ?
-            AND paid_amount > 0
-        ) x
-        ORDER BY created_at ASC, id ASC
-      `;
+            UNION ALL
 
-      db.query(
-        ledgerSql,
-        [customerId, customerId, customerId, customerId],
-        (err, ledgerRows) => {
-          if (err) return db.query('ROLLBACK', () => innerReject(err));
+            SELECT
+              id,
+              paid_amount AS amount,
+              created_at,
+              'payment' AS type
+            FROM sales
+            WHERE customer_id = ?
+              AND paid_amount > 0
+          ) x
+          ORDER BY created_at ASC, id ASC
+        `;
 
-          let runningBalance = 0;
-          const saleUpdates = [];
+        const [ledgerRows] = await connection.query(
+          ledgerSql,
+          [customerId, customerId, customerId, customerId]
+        );
 
-          for (const row of ledgerRows) {
-            const amount = Number(row.amount || 0);
+        let runningBalance = 0;
+        const saleUpdates = [];
 
-            if (row.type === 'sale') {
-              const previousBalance = runningBalance;
-              runningBalance += amount;
+        for (const row of ledgerRows) {
+          const amount = Number(row.amount || 0);
 
-              saleUpdates.push({
-                saleId: row.id,
-                previousBalance,
-                customerBalance: runningBalance,
-              });
-            } else {
-              runningBalance -= amount;
-            }
+          if (row.type === 'sale') {
+            const previousBalance = runningBalance;
+            runningBalance += amount;
+
+            saleUpdates.push({
+              saleId: row.id,
+              previousBalance,
+              customerBalance: runningBalance,
+            });
+          } else {
+            runningBalance -= amount;
           }
+        }
 
-          const finalBalance = Number(runningBalance.toFixed(2));
+        const finalBalance = Number(runningBalance.toFixed(2));
 
-          db.query(
-            'UPDATE customers SET balance = ? WHERE id = ?',
-            [finalBalance, customerId],
-            (err2) => {
-              if (err2) return db.query('ROLLBACK', () => innerReject(err2));
+        await connection.query(
+          'UPDATE customers SET balance = ? WHERE id = ?',
+          [finalBalance, customerId]
+        );
 
-              const updateNext = (index) => {
-                if (index >= saleUpdates.length) {
-                  return db.query('COMMIT', (commitErr) => {
-                    if (commitErr) {
-                      return db.query('ROLLBACK', () => innerReject(commitErr));
-                    }
-                    return innerResolve(finalBalance);
-                  });
-                }
-
-                const sale = saleUpdates[index];
-
-                db.query(
-                  `UPDATE sales
-                   SET previous_balance = ?,
-                       customer_balance = ?
-                   WHERE id = ?`,
-                  [
-                    sale.previousBalance,
-                    sale.customerBalance,
-                    sale.saleId,
-                  ],
-                  (err3) => {
-                    if (err3) return db.query('ROLLBACK', () => innerReject(err3));
-                    updateNext(index + 1);
-                  }
-                );
-              };
-
-              updateNext(0);
-            }
+        for (const sale of saleUpdates) {
+          await connection.query(
+            `UPDATE sales
+             SET previous_balance = ?,
+                 customer_balance = ?
+             WHERE id = ?`,
+            [
+              sale.previousBalance,
+              sale.customerBalance,
+              sale.saleId,
+            ]
           );
         }
-      );
-    });
+
+        await connection.commit();
+        innerResolve(finalBalance);
+
+      } catch (err) {
+        if (connection) {
+          try {
+            await connection.rollback();
+          } catch (_) {}
+        }
+        innerReject(err);
+      } finally {
+        if (connection) {
+          connection.release();
+        }
+      }
+    })();
   });
 
   customerLedgerRebuildLocks.set(customerId, rebuildPromise);
@@ -353,13 +350,26 @@ export const getCustomerLedger = (req, res) => {
 
     UNION ALL
 
-    SELECT id, amount, created_at, 'payment' AS type, NULL AS items
-    FROM payments WHERE customer_id = ?
+    SELECT 
+      id,
+      amount,
+      created_at,
+      'payment' AS type,
+      NULL AS items
+    FROM payments
+    WHERE customer_id = ?
 
     UNION ALL
 
-    SELECT id, paid_amount AS amount, created_at, 'payment' AS type, NULL AS items
-    FROM sales WHERE customer_id = ? AND paid_amount > 0
+    SELECT 
+      id,
+      paid_amount AS amount,
+      created_at,
+      'sale_payment' AS type,
+      NULL AS items
+    FROM sales
+    WHERE customer_id = ?
+      AND paid_amount > 0
 
     UNION ALL
 
@@ -380,7 +390,7 @@ export const getCustomerLedger = (req, res) => {
           UNION ALL
           SELECT amount, 'payment' FROM payments WHERE customer_id = ?
           UNION ALL
-          SELECT paid_amount, 'payment' FROM sales WHERE customer_id = ? AND paid_amount > 0
+          SELECT paid_amount, 'sale_payment' FROM sales WHERE customer_id = ? AND paid_amount > 0
           UNION ALL
           SELECT amount, 'return' FROM customer_returns WHERE customer_id = ?
         ) t
@@ -410,39 +420,39 @@ export const getCustomerLedger = (req, res) => {
             const totals = totalsResult[0] || {};
             const totalRecords = countResult[0]?.total || 0;
 
-            // opening balance (derived)
-            const openingBalance = Number(customer.balance || 0) - (Number(totals.debit || 0) - Number(totals.credit || 0));
+            // Ledger is already stored historically by rebuildCustomerLedger.
+            // Start from zero and calculate true chronological balances.
+            let running = 0;
 
-            // we calculate from oldest → newest
-            let running = openingBalance;
-
-            // already in ASC order from DB
             const calculated = ledger.map(e => {
               const amt = Number(e.amount || 0);
-              if (e.type === 'sale') running += amt;
-              else running -= amt;
-              return { ...e, amount: amt, balance: Number(running) };
+
+              if (e.type === 'sale') {
+                running += amt;
+              } else if (
+                e.type === 'payment' ||
+                e.type === 'sale_payment' ||
+                e.type === 'return'
+              ) {
+                running -= amt;
+              }
+
+              return {
+                ...e,
+                amount: amt,
+                balance: Number(running.toFixed(2))
+              };
             });
 
-            // then reverse back to DESC for UI
-            const fullLedger = [
-              ...calculated.reverse(),
-              {
-                id: 'OPENING',
-                amount: 0,
-                created_at: null,
-                type: 'opening',
-                balance: openingBalance
-              }
-            ];
+            const fullLedger = calculated.reverse();
 
             res.json({
               customer,
               ledger: fullLedger,
               totals: {
-                debit: Number(totals.debit || 0) + Number(openingBalance || 0),
+                debit: Number(totals.debit || 0),
                 credit: Number(totals.credit || 0),
-                net: (Number(totals.debit || 0) + Number(openingBalance || 0)) - Number(totals.credit || 0),
+                net: Number(customer.balance || 0),
               },
               pagination: {
                 page,
@@ -1197,10 +1207,6 @@ export const addCustomerReturn = (req, res) => {
         );
 
         // update customer balance
-        db.query(
-          "UPDATE customers SET balance = balance - ? WHERE id = ?",
-          [returnAmount, customer_id]
-        );
 
         // =======================================================
         // 2) MODIFY handleRows → REMOVE DB insert logic

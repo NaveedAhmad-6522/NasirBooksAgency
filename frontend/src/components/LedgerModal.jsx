@@ -527,10 +527,15 @@ function CustomerLedgerPage({ onViewSale }) {
                     if (!l) return null;
 
                     const isSale = l.type === "sale";
-                    const isPayment = l.type === "payment";
-                    const isReturn = l.type === "return";
-                    const isOpening = l.type === "opening";
-                    const canEdit = isSale || isPayment;
+const isPayment = l.type === "payment";
+const isSalePayment = l.type === "sale_payment";
+const isReturn = l.type === "return";
+const isOpening = l.type === "opening";
+
+const canEdit =
+  isSale ||
+  isPayment ||
+  isReturn;
                     const refLabel = isOpening
                       ? "OPENING"
                       : isReturn
@@ -542,6 +547,7 @@ function CustomerLedgerPage({ onViewSale }) {
                         key={i}
                         className={`border-b transition ${isSale ? "bg-red-50 hover:bg-red-100 hover:shadow-[0_2px_10px_rgba(0,0,0,0.04)]" :
                             isPayment ? "bg-green-50 hover:bg-green-100 hover:shadow-[0_2px_10px_rgba(0,0,0,0.04)]" :
+                              isSalePayment ? "bg-blue-50 hover:bg-blue-100 hover:shadow-[0_2px_10px_rgba(0,0,0,0.04)]" :
                               isReturn ? "bg-orange-50 hover:bg-orange-100 hover:shadow-[0_2px_10px_rgba(0,0,0,0.04)]" :
                                 "hover:bg-gray-50 hover:shadow-[0_2px_10px_rgba(0,0,0,0.04)]"
                           }`}
@@ -554,16 +560,23 @@ function CustomerLedgerPage({ onViewSale }) {
                               ? "text-blue-600 cursor-pointer hover:underline"
                               : isPayment
                                 ? "text-indigo-600 cursor-pointer hover:underline"
-                                : isReturn
-                                  ? "text-green-700 cursor-pointer hover:underline"
-                                  : "text-gray-800"
+                                : isSalePayment
+                                  ? "text-blue-600 cursor-pointer hover:underline"
+                                  : isReturn
+                                    ? "text-green-700 cursor-pointer hover:underline"
+                                    : "text-gray-800"
                             }`}
                           onClick={() => {
                             if (isSale) {
                               window.open(`/sales/${l.id}`, "_blank");
                             } else if (isPayment) {
                               setSelectedPayment(l);
-                            } else if (isReturn) {
+                            } 
+                            else if (isSalePayment) {
+
+                              window.open(`/sales/${l.id}`, "_blank");
+                            
+                            }else if (isReturn) {
                               const win = window.open("", "", "width=800,height=600");
 
                               // parse items BEFORE rendering
@@ -688,6 +701,11 @@ function CustomerLedgerPage({ onViewSale }) {
                           {isOpening && <span className="px-2 py-1 text-xs rounded bg-gray-200 text-gray-700">Opening</span>}
                           {isSale && <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-700">Sale</span>}
                           {isPayment && <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-700">Payment</span>}
+                          {isSalePayment && (
+  <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700">
+    Invoice Payment
+  </span>
+)}
                           {isReturn && <span className="px-2 py-1 text-xs rounded bg-orange-100 text-orange-700">Return</span>}
                         </td>
                         <td className="p-3 text-gray-600">
@@ -695,7 +713,7 @@ function CustomerLedgerPage({ onViewSale }) {
                           {isSale && `Invoice #${l.id}`}
                           {isReturn && `Return Invoice #${l.id}`}
                           {isPayment && "Payment Received"}
-                        </td>
+                          {isSalePayment && "Invoice Payment"}                        </td>
                         <td
                           className="p-3 text-right font-semibold"
                           style={{ color: isSale ? "#dc2626" : "#999" }}
@@ -704,15 +722,22 @@ function CustomerLedgerPage({ onViewSale }) {
                         </td>
                         <td
                           className="p-3 text-right font-semibold"
-                          style={{ color: isPayment || isReturn ? "#16a34a" : "#999" }}
-                        >
-                          {isPayment || isReturn ? `Rs ${Number(l.amount).toLocaleString()}` : "-"}
-                        </td>
+                          style={{
+                            color:
+                              isPayment ||
+                              isSalePayment ||
+                              isReturn
+                                ? "#16a34a"
+                                : "#999",
+                          }}                        >
+{isPayment || isSalePayment || isReturn
+  ? `Rs ${Number(l.amount).toLocaleString()}`
+  : "-"}                        </td>
                         <td className="p-3 text-right font-bold text-gray-800">
                           Rs {Number(l.balance).toLocaleString()}
                         </td>
                         <td className="p-3 text-center no-print">
-                          {!isOpening && (
+                          {!isOpening && !isSalePayment && (
                             <button
                               disabled={!canEdit}
                               onClick={async () => {
@@ -789,7 +814,9 @@ function CustomerLedgerPage({ onViewSale }) {
                                 isSale
                                   ? "Edit Sale"
                                   : isPayment
-                                    ? "Edit Payment"
+                                  ? "Edit Payment"
+                                  : isSalePayment
+                                    ? "Invoice payment entries cannot be edited separately. Edit the invoice instead."
                                     : "Editing disabled for this transaction"
                               }
                               className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border transition-all duration-200 shadow-sm
@@ -1252,6 +1279,9 @@ function CustomerLedgerPage({ onViewSale }) {
                           return;
                         }
                         setSavingEdit(true);
+                        if (!editingTransaction.id) {
+                          throw new Error("Invalid payment id");
+                        }
                         const res = await fetch(
                           `${API_BASE}/api/customers/${id}/ledger/${editingTransaction.id}`,
                           {
@@ -1259,7 +1289,6 @@ function CustomerLedgerPage({ onViewSale }) {
                             headers: authHeaders(true),
                             body: JSON.stringify({
                               type: "payment",
-                              amount: Number(editAmount),
                               newAmount: Number(editAmount),
                             }),
                           }
