@@ -204,22 +204,48 @@ export const createSale = (req, res) => {
                   existingSaleTotal = 0;
                   existingSalePaid = 0;
 
-                  connection.query(
-                    "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number, previous_balance, customer_balance) VALUES (?, ?, ?, ?, ?, ?)",
-                    [finalCustomerId, total, paidValue, nextInvoice, 0, 0],
-                    (err, saleResult) => {
-                      if (err) {
-                        console.error("SALE ERROR:", err);
-                      
-                        return connection.rollback(() => {
-                          connection.release();
-                          return res.status(500).json({ error: "Sale failed" });
-                        });
-                      }
+                 connection.query(
+                   "SELECT balance, opening_balance FROM customers WHERE id = ? FOR UPDATE",
+                   [finalCustomerId],
+                   (balErr, balRows) => {
+                     if (balErr || !balRows.length) {
+                       return connection.rollback(() => {
+                         connection.release();
+                         return res.status(500).json({ error: "Balance fetch failed" });
+                       });
+                     }
 
-                      continueSaleProcess(saleResult.insertId, nextInvoice);
-                    }
-                  );
+                     const currentBalance = Number(balRows[0].balance || 0);
+                     const openingBalance = Number(balRows[0].opening_balance || 0);
+
+                     const invoicePreviousBalance = currentBalance || openingBalance;
+                     const invoiceBalance = invoicePreviousBalance + total - paidValue;
+
+                     connection.query(
+                       "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number, previous_balance, customer_balance) VALUES (?, ?, ?, ?, ?, ?)",
+                       [
+                         finalCustomerId,
+                         total,
+                         paidValue,
+                         nextInvoice,
+                         invoicePreviousBalance,
+                         invoiceBalance,
+                       ],
+                       (err, saleResult) => {
+                         if (err) {
+                           console.error("SALE ERROR:", err);
+
+                           return connection.rollback(() => {
+                             connection.release();
+                             return res.status(500).json({ error: "Sale failed" });
+                           });
+                         }
+
+                         continueSaleProcess(saleResult.insertId, nextInvoice);
+                       }
+                     );
+                   }
+                 );
                 }
               );
             }
@@ -490,13 +516,11 @@ export const createSale = (req, res) => {
                       const currentSale = saleRows[0];
 
                       connection.query(
-                        `SELECT customer_balance
-                           FROM sales
-                          WHERE customer_id = ?
-                            AND id <> ?
-                          ORDER BY created_at DESC, id DESC
+                        `SELECT balance, opening_balance
+                           FROM customers
+                          WHERE id = ?
                           LIMIT 1`,
-                        [finalCustomerId, saleId],
+                        [finalCustomerId],
                         (prevErr, prevRows) => {
                           if (prevErr) {
                             return connection.rollback(() => {
@@ -505,9 +529,7 @@ export const createSale = (req, res) => {
                             });
                           }
 
-                          const invoicePreviousBalance = prevRows.length
-                            ? Number(prevRows[0].customer_balance || 0)
-                            : openingBalance;
+                          const invoicePreviousBalance = Number(prevRows[0]?.balance || openingBalance || 0);
 
                           const newBalance = oldBalance + total - paidValue;
 
