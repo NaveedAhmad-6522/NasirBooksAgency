@@ -69,7 +69,15 @@ async function rebuildCustomerLedger(customerId) {
             WHERE customer_id = ?
               AND paid_amount > 0
           ) x
-          ORDER BY created_at ASC, id ASC
+          ORDER BY
+            created_at ASC,
+            CASE
+              WHEN type = 'payment' THEN 1
+              WHEN type = 'return' THEN 2
+              WHEN type = 'sale' THEN 3
+              ELSE 4
+            END,
+            id ASC
         `;
 
         const [ledgerRows] = await connection.query(
@@ -83,15 +91,19 @@ async function rebuildCustomerLedger(customerId) {
           const amount = Number(row.amount || 0);
 
           if (row.type === 'sale') {
-            const previousBalance = runningBalance;
+            const previousBalance = Number(runningBalance.toFixed(2));
+
             runningBalance += amount;
 
             saleUpdates.push({
               saleId: row.id,
               previousBalance,
-              customerBalance: runningBalance,
+              customerBalance: Number(runningBalance.toFixed(2)),
             });
-          } else {
+          } else if (
+            row.type === 'payment' ||
+            row.type === 'return'
+          ) {
             runningBalance -= amount;
           }
         }
