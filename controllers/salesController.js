@@ -218,7 +218,7 @@ export const createSale = (req, res) => {
                      const currentBalance = Number(balRows[0].balance || 0);
                      const openingBalance = Number(balRows[0].opening_balance || 0);
 
-                     const invoicePreviousBalance = currentBalance || openingBalance;
+                     const invoicePreviousBalance = currentBalance;
                      const invoiceBalance = invoicePreviousBalance + total - paidValue;
 
                      connection.query(
@@ -515,77 +515,61 @@ export const createSale = (req, res) => {
 
                       const currentSale = saleRows[0];
 
+                      const invoicePreviousBalance = Number(currentSale.previous_balance || 0);
+
+                      const newBalance = oldBalance + total - paidValue;
+
+                      const invoiceBalance =
+                        invoicePreviousBalance +
+                        Number(existingSaleTotal || 0) +
+                        total -
+                        Number(existingSalePaid || 0) -
+                        paidValue;
+
                       connection.query(
-                        `SELECT balance, opening_balance
-                           FROM customers
-                          WHERE id = ?
-                          LIMIT 1`,
-                        [finalCustomerId],
-                        (prevErr, prevRows) => {
-                          if (prevErr) {
+                        `UPDATE sales
+                           SET previous_balance = ?,
+                               customer_balance = ?
+                         WHERE id = ?`,
+                        [invoicePreviousBalance, invoiceBalance, saleId],
+                        (snapshotErr) => {
+                          if (snapshotErr) {
                             return connection.rollback(() => {
                               connection.release();
-                              return res.status(500).json({ error: "Previous balance fetch failed" });
+                              return res.status(500).json({ error: "Sale snapshot update failed" });
                             });
                           }
 
-                          const invoicePreviousBalance = Number(prevRows[0]?.balance || openingBalance || 0);
-
-                          const newBalance = oldBalance + total - paidValue;
-
-                          const invoiceBalance =
-                            invoicePreviousBalance +
-                            Number(existingSaleTotal || 0) +
-                            total -
-                            Number(existingSalePaid || 0) -
-                            paidValue;
-
                           connection.query(
-                            `UPDATE sales
-                               SET previous_balance = ?,
-                                   customer_balance = ?
-                             WHERE id = ?`,
-                            [invoicePreviousBalance, invoiceBalance, saleId],
-                            (snapshotErr) => {
-                              if (snapshotErr) {
+                            "UPDATE customers SET balance = ? WHERE id = ?",
+                            [newBalance, finalCustomerId],
+                            (err) => {
+                              if (err) {
                                 return connection.rollback(() => {
                                   connection.release();
-                                  return res.status(500).json({ error: "Sale snapshot update failed" });
+                                  return res.status(500).json({ error: "Balance update failed" });
                                 });
                               }
 
-                              connection.query(
-                                "UPDATE customers SET balance = ? WHERE id = ?",
-                                [newBalance, finalCustomerId],
-                                (err) => {
-                                  if (err) {
-                                    return connection.rollback(() => {
-                                      connection.release();
-                                      return res.status(500).json({ error: "Balance update failed" });
-                                    });
-                                  }
-
-                                  connection.commit((err) => {
-                                    if (err) {
-                                      return connection.rollback(() => {
-                                        connection.release();
-                                        return res.status(500).json({ error: "Commit failed" });
-                                      });
-                                    }
-
+                              connection.commit((err) => {
+                                if (err) {
+                                  return connection.rollback(() => {
                                     connection.release();
-                                    res.json({
-                                      message: "Sale completed",
-                                      sale_id: saleId,
-                                      invoice_number: generatedInvoiceNumber,
-                                      total,
-                                      paid: paidValue,
-                                      remaining,
-                                      newBalance,
-                                    });
+                                    return res.status(500).json({ error: "Commit failed" });
                                   });
                                 }
-                              );
+
+                                connection.release();
+                                res.json({
+                                  message: "Sale completed",
+                                  sale_id: saleId,
+                                  invoice_number: generatedInvoiceNumber,
+                                  total,
+                                  paid: paidValue,
+                                  remaining,
+                                  newBalance,
+                                });
+                              });
                             }
                           );
                         }
