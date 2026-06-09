@@ -96,6 +96,9 @@ export const createSale = (req, res) => {
 
         const proceedWithSale = (finalCustomerId, isWalkIn) => {
 
+          let existingSaleTotal = 0;
+          let existingSalePaid = 0;
+
           // ✅ WALK-IN SALES SHOULD ALWAYS CREATE NEW INVOICE
           if (isWalkIn) {
             return connection.query(
@@ -153,12 +156,14 @@ export const createSale = (req, res) => {
               // ✅ MERGE INTO EXISTING DAILY INVOICE
               if (existingSales.length > 0) {
                 const existingSale = existingSales[0];
+                existingSaleTotal = Number(existingSale.total_amount || 0);
+                existingSalePaid = Number(existingSale.paid_amount || 0);
 
                 const updatedTotal =
-                  Number(existingSale.total_amount || 0) + total;
+                  existingSaleTotal + total;
 
                 const updatedPaid =
-                  Number(existingSale.paid_amount || 0) + paidValue;
+                  existingSalePaid + paidValue;
 
                 return connection.query(
                   `UPDATE sales
@@ -196,6 +201,8 @@ export const createSale = (req, res) => {
                   }
 
                   const nextInvoice = String(invRows[0].nextInvoice);
+                  existingSaleTotal = 0;
+                  existingSalePaid = 0;
 
                   connection.query(
                     "INSERT INTO sales (customer_id, total_amount, paid_amount, invoice_number, previous_balance, customer_balance) VALUES (?, ?, ?, ?, ?, ?)",
@@ -465,52 +472,79 @@ export const createSale = (req, res) => {
 
                   const oldBalance = Number(result[0]?.balance) || 0;
 
-                  const newBalance = oldBalance + total - paidValue;
-
                   connection.query(
-                    `UPDATE sales
-                     SET previous_balance = ?,
-                         customer_balance = ?
-                     WHERE id = ?`,
-                    [oldBalance, newBalance, saleId],
-                    (snapshotErr) => {
-                      if (snapshotErr) {
+                    `SELECT previous_balance
+                       FROM sales
+                      WHERE id = ?
+                      LIMIT 1`,
+                    [saleId],
+                    (snapErr, saleRows) => {
+                      if (snapErr || !saleRows.length) {
                         return connection.rollback(() => {
                           connection.release();
-                          return res.status(500).json({ error: "Sale snapshot update failed" });
+                          return res.status(500).json({ error: "Sale snapshot fetch failed" });
                         });
                       }
 
+                      const invoicePreviousBalance = Number(
+                        saleRows[0].previous_balance || oldBalance
+                      );
+
+                      const newBalance = oldBalance + total - paidValue;
+
+                      const invoiceBalance =
+                        invoicePreviousBalance +
+                        Number(existingSaleTotal || 0) +
+                        total -
+                        Number(existingSalePaid || 0) -
+                        paidValue;
+
                       connection.query(
-                        "UPDATE customers SET balance = ? WHERE id = ?",
-                        [newBalance, finalCustomerId],
-                        (err) => {
-                          if (err) {
+                        `UPDATE sales
+                           SET previous_balance = ?,
+                               customer_balance = ?
+                         WHERE id = ?`,
+                        [invoicePreviousBalance, invoiceBalance, saleId],
+                        (snapshotErr) => {
+                          if (snapshotErr) {
                             return connection.rollback(() => {
                               connection.release();
-                              return res.status(500).json({ error: "Balance update failed" });
+                              return res.status(500).json({ error: "Sale snapshot update failed" });
                             });
                           }
 
-                          connection.commit((err) => {
-                            if (err) {
-                              return connection.rollback(() => {
+                          connection.query(
+                            "UPDATE customers SET balance = ? WHERE id = ?",
+                            [newBalance, finalCustomerId],
+                            (err) => {
+                              if (err) {
+                                return connection.rollback(() => {
+                                  connection.release();
+                                  return res.status(500).json({ error: "Balance update failed" });
+                                });
+                              }
+
+                              connection.commit((err) => {
+                                if (err) {
+                                  return connection.rollback(() => {
+                                    connection.release();
+                                    return res.status(500).json({ error: "Commit failed" });
+                                  });
+                                }
+
                                 connection.release();
-                                return res.status(500).json({ error: "Commit failed" });
+                                res.json({
+                                  message: "Sale completed",
+                                  sale_id: saleId,
+                                  invoice_number: generatedInvoiceNumber,
+                                  total,
+                                  paid: paidValue,
+                                  remaining,
+                                  newBalance,
+                                });
                               });
                             }
-
-                            connection.release();
-                            res.json({
-                              message: "Sale completed",
-                              sale_id: saleId,
-                              invoice_number: generatedInvoiceNumber,
-                              total,
-                              paid: paidValue,
-                              remaining,
-                              newBalance,
-                            });
-                          });
+                          );
                         }
                       );
                     }
