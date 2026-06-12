@@ -96,6 +96,29 @@ const [profitRows] = await db.promise().query(`
 
 const totalProfit = Number(profitRows[0]?.totalProfit || 0);
 
+// TOP CUSTOMERS (respects selected filter)
+const [topCustomersRows] = await db.promise().query(`
+  SELECT
+    c.id,
+    c.name,
+    COUNT(DISTINCT s.id) AS orders,
+    IFNULL(SUM(s.total_amount), 0) AS total_purchase
+  FROM sales s
+  LEFT JOIN customers c ON c.id = s.customer_id
+  WHERE ${effectiveDateCondition.replaceAll('created_at', 's.created_at')}
+    AND s.customer_id IS NOT NULL
+  GROUP BY c.id, c.name
+  ORDER BY total_purchase DESC
+  LIMIT 5
+`, params);
+
+const topCustomers = topCustomersRows.map(row => ({
+  id: row.id,
+  name: row.name,
+  orders: Number(row.orders || 0),
+  total_purchase: Number(row.total_purchase || 0)
+}));
+
     // 🔹 TOTAL PAYABLE (ALL-TIME, ignore filters)
     const [payableRows] = await db.promise().query(`
       SELECT 
@@ -222,7 +245,8 @@ const totalProfit = Number(profitRows[0]?.totalProfit || 0);
           total: Number(r.total || 0)
         };
       }),
-      paymentFlow
+      paymentFlow,
+      topCustomers
     });
 
   } catch (error) {

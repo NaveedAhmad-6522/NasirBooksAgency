@@ -385,6 +385,78 @@ export default function ReportsDashboard({ onLogout }) {
         />
       </div>
 
+      {/* Top Customers */}
+      <SectionCard title="Top Customers">
+        {reportData?.topCustomers?.length ? (
+          <>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  Highest Purchase Customers
+                </p>
+                
+              </div>
+
+              <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">
+                Top 5 Customers
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {reportData.topCustomers.slice(0, 5).map((customer, index) => (
+                <div
+                  key={customer.id}
+                  className={`relative overflow-hidden rounded-2xl border bg-white p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+                    index === 0
+                      ? 'border-yellow-300 shadow-md'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div
+                      className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                        index === 0
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : index === 1
+                          ? 'bg-gray-100 text-gray-700'
+                          : index === 2
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}
+                    >
+                      #{index + 1}
+                    </div>
+
+                    <span className="text-xs text-gray-500">
+                      {customer.orders || 0} Orders
+                    </span>
+                  </div>
+
+                  <h3
+                    className="font-semibold text-gray-900 truncate"
+                    title={customer.name}
+                  >
+                    {customer.name}
+                  </h3>
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Total Purchase
+                  </p>
+
+                  <p className="text-lg font-bold text-green-600 mt-1">
+                    Rs {formatFull(customer.total_purchase || 0)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-10 text-gray-500">
+            No customer purchase data available.
+          </div>
+        )}
+      </SectionCard>
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
 
