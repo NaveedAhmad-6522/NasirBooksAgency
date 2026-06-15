@@ -220,7 +220,9 @@ function Invoice({
               </div>
 
               <div className="text-gray-500 mt-1 text-xs">
-                {sale.created_at ? new Date(sale.created_at).toLocaleDateString() : ""}
+                {sale.created_at
+                  ? new Date(sale.created_at).toLocaleDateString("en-GB")
+                  : ""}
               </div>
             </div>
           </div>
