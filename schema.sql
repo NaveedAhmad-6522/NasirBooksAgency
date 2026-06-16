@@ -21,7 +21,7 @@ SET @@SESSION.SQL_LOG_BIN= 0;
 -- GTID state at the beginning of the backup 
 --
 
-SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'fb52291e-05b9-11f0-9b44-72ea4185d9af:1-1733';
+SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ 'fb52291e-05b9-11f0-9b44-72ea4185d9af:1-2080';
 
 --
 -- Table structure for table `books`
@@ -84,7 +84,7 @@ CREATE TABLE `customer_discounts` (
   `discount` decimal(5,2) DEFAULT '0.00',
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_customer_book` (`customer_id`,`book_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=167 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=261 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -122,10 +122,11 @@ CREATE TABLE `customers` (
   `city` varchar(100) DEFAULT NULL,
   `balance` decimal(10,2) DEFAULT '0.00',
   `is_walkin` tinyint(1) DEFAULT '0',
+  `opening_balance` decimal(10,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_phone` (`phone`),
   KEY `idx_customers_phone` (`phone`)
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -145,7 +146,7 @@ CREATE TABLE `payments` (
   PRIMARY KEY (`id`),
   KEY `idx_payments_customer_date` (`customer_id`,`created_at` DESC),
   CONSTRAINT `payments_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -190,7 +191,7 @@ CREATE TABLE `purchases` (
   KEY `idx_purchases_book_date` (`book_id`,`created_at` DESC),
   CONSTRAINT `purchases_ibfk_1` FOREIGN KEY (`book_id`) REFERENCES `books` (`id`) ON DELETE CASCADE,
   CONSTRAINT `purchases_ibfk_2` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -206,6 +207,7 @@ CREATE TABLE `sale_items` (
   `book_id` int DEFAULT NULL,
   `quantity` int DEFAULT NULL,
   `price` decimal(10,2) DEFAULT NULL,
+  `purchase_price_snapshot` decimal(10,2) DEFAULT NULL,
   `discount_percent` decimal(5,2) DEFAULT NULL,
   `final_price` decimal(10,2) DEFAULT NULL,
   `discount` decimal(5,2) DEFAULT NULL,
@@ -219,7 +221,7 @@ CREATE TABLE `sale_items` (
   KEY `idx_sale_items_book_id` (`book_id`),
   CONSTRAINT `sale_items_ibfk_1` FOREIGN KEY (`sale_id`) REFERENCES `sales` (`id`),
   CONSTRAINT `sale_items_ibfk_2` FOREIGN KEY (`book_id`) REFERENCES `books` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=197 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=256 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -246,7 +248,7 @@ CREATE TABLE `sales` (
   KEY `idx_sales_created_at` (`created_at`),
   KEY `idx_sales_customer_id` (`customer_id`),
   CONSTRAINT `sales_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=68 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=91 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -335,4 +337,4 @@ SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-06-07 18:53:24
+-- Dump completed on 2026-06-16 15:03:02

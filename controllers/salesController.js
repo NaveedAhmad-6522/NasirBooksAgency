@@ -268,7 +268,11 @@ export const createSale = (req, res) => {
 
               // ✅ FETCH SNAPSHOT DATA FROM BOOKS TABLE
               connection.query(
-                `SELECT title, publisher, edition
+                `SELECT
+                    title,
+                    publisher,
+                    edition,
+                    purchase_price
                  FROM books
                  WHERE id = ?
                  LIMIT 1`,
@@ -353,17 +357,19 @@ export const createSale = (req, res) => {
                          book_id,
                          quantity,
                          price,
+                         purchase_price_snapshot,
                          discount,
                          book_name,
                          publisher,
                          edition
                        )
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                           [
                             saleIdValue,
                             bookId,
                             qty,
                             price,
+                            Number(snapshot.purchase_price || 0),
                             discount,
                             snapshot.title || "",
                             snapshot.publisher || "",

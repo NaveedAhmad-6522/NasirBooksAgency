@@ -80,7 +80,9 @@ const [profitRows] = await db.promise().query(`
           * si.quantity
         )
         -
-        (p.purchase_price * si.quantity)
+        (
+          COALESCE(si.purchase_price_snapshot, p.purchase_price, 0) * si.quantity
+        )
       ),
       0
     ) AS totalProfit
@@ -539,47 +541,122 @@ export const getLowStockDetails = async (req, res) => {
 
 export const getProfitDetails = async (req, res) => {
   try {
+    const { filter = "Today", date } = req.query;
+
+    let condition = "1=1";
+    let params = [];
+
+    if (filter === "Today") {
+      condition = `DATE(s.created_at) = ?`;
+      params = [date];
+    }
+
+    if (filter === "This Week") {
+      condition = `DATE(s.created_at) BETWEEN DATE_SUB(?, INTERVAL 6 DAY) AND ?`;
+      params = [date, date];
+    }
+
+    if (filter === "This Month") {
+      condition = `DATE(s.created_at) BETWEEN DATE_SUB(?, INTERVAL 29 DAY) AND ?`;
+      params = [date, date];
+    }
+
     const [rows] = await db.promise().query(`
-SELECT 
-  b.title,
-  b.publisher,
-  b.edition,
-  si.price AS selling_price,
-  p.purchase_price,
-  b.printed_price,
-  SUM(si.quantity) AS total_sold,
+SELECT
+    COALESCE(si.book_name,'Unknown Book') AS title,
+    COALESCE(si.publisher,'') AS publisher,
+    COALESCE(si.edition,'') AS edition,
 
-  (
-    (si.price * (1 - IFNULL(si.discount,0)/100))
-    - p.purchase_price
-  ) AS profit_per_unit,
+    AVG(
+        COALESCE(
+            si.purchase_price_snapshot,
+            p.purchase_price,
+            0
+        )
+    ) AS purchase_price,
 
-  SUM(
-   (
-     (si.price * (1 - IFNULL(si.discount,0)/100))
-     - p.purchase_price
-   ) * si.quantity
-  ) AS total_profit
+    si.price AS selling_price,
+
+    SUM(si.quantity) AS total_sold,
+
+    (
+        si.price -
+        AVG(
+            COALESCE(
+                si.purchase_price_snapshot,
+                p.purchase_price,
+                0
+            )
+        )
+    ) AS profit_per_unit,
+
+    CASE
+        WHEN AVG(
+            COALESCE(
+                si.purchase_price_snapshot,
+                p.purchase_price,
+                0
+            )
+        ) > 0
+        THEN (
+            (
+                si.price -
+                AVG(
+                    COALESCE(
+                        si.purchase_price_snapshot,
+                        p.purchase_price,
+                        0
+                    )
+                )
+            )
+            /
+            AVG(
+                COALESCE(
+                    si.purchase_price_snapshot,
+                    p.purchase_price,
+                    0
+                )
+            )
+        ) * 100
+        ELSE 0
+    END AS profit_percentage,
+
+    SUM(
+        (
+            si.price -
+            COALESCE(
+                si.purchase_price_snapshot,
+                p.purchase_price,
+                0
+            )
+        ) * si.quantity
+    ) AS total_profit
 
 FROM sale_items si
-LEFT JOIN books b ON si.book_id = b.id
+
+JOIN sales s
+    ON s.id = si.sale_id
+
 LEFT JOIN (
-  SELECT book_id, MAX(purchase_price) AS purchase_price
-  FROM purchases
-  GROUP BY book_id
-) p ON si.book_id = p.book_id
+    SELECT
+        book_id,
+        MAX(purchase_price) AS purchase_price
+    FROM purchases
+    WHERE type = 'purchase'
+    GROUP BY book_id
+) p
+ON p.book_id = si.book_id
+
+WHERE ${condition}
 
 GROUP BY
-  si.book_id,
-  si.price,
-  si.discount,
-  p.purchase_price,
-  b.title,
-  b.publisher,
-  b.edition,
-  b.printed_price
-ORDER BY total_profit DESC;
-    `);
+    si.book_name,
+    si.publisher,
+    si.edition,
+    si.price
+
+ORDER BY total_profit DESC
+`, params);
 
     const data = rows.map(r => ({
       title: r.title,
@@ -587,7 +664,7 @@ ORDER BY total_profit DESC;
       edition: r.edition,
       purchase_price: Number(r.purchase_price || 0),
       selling_price: Number(r.selling_price || 0),
-      printed_price: Number(r.printed_price || 0),
+      // printed_price: Number(r.printed_price || 0), // Removed as per instructions
       total_sold: Number(r.total_sold || 0),
       profit_per_unit: Number(r.profit_per_unit || 0),
       total_profit: Number(r.total_profit || 0)
@@ -599,7 +676,7 @@ ORDER BY total_profit DESC;
       edition: "",
       purchase_price: 0,
       selling_price: 0,
-      printed_price: 0,
+      // printed_price: 0, // Removed as per instructions
       total_sold: data.reduce((s, r) => s + r.total_sold, 0),
       profit_per_unit: 0,
       total_profit: data.reduce((s, r) => s + r.total_profit, 0)
