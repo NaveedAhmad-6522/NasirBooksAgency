@@ -382,13 +382,12 @@ export const getCustomerLedger = (req, res) => {
             'quantity', si.quantity,
             'price', si.price,
             'discount', si.discount,
-            'title', b.title,
-            'publisher', b.publisher,
-            'edition', b.edition
+            'title', si.book_name,
+            'publisher', si.publisher,
+            'edition', si.edition
           )
         )
         FROM sale_items si
-        LEFT JOIN books b ON b.id = si.book_id
         WHERE si.sale_id = s.id
       ) AS items
     FROM sales s
@@ -1085,9 +1084,9 @@ export const getCustomerSales = (req, res) => {
   if (search) {
     searchCondition = `
       AND (
-        b.title LIKE ?
-        OR b.publisher LIKE ?
-        OR b.edition LIKE ?
+        si.book_name LIKE ?
+        OR si.publisher LIKE ?
+        OR si.edition LIKE ?
       )
     `;
 
@@ -1100,9 +1099,9 @@ export const getCustomerSales = (req, res) => {
     SELECT 
       MIN(si.id) AS id,
       si.book_id,
-      b.title AS book_name,
-      b.publisher,
-      b.edition AS edition,
+      MAX(si.book_name) AS book_name,
+      MAX(si.publisher) AS publisher,
+      MAX(si.edition) AS edition,
 
       SUM(si.quantity) AS quantity,
 
@@ -1123,9 +1122,6 @@ export const getCustomerSales = (req, res) => {
 
     JOIN sales s
       ON s.id = si.sale_id
-
-    LEFT JOIN books b
-      ON si.book_id = b.id
 
     LEFT JOIN customer_discounts cbd 
       ON cbd.book_id = si.book_id 
@@ -1148,9 +1144,16 @@ export const getCustomerSales = (req, res) => {
       SELECT si.book_id
       FROM sale_items si
       JOIN sales s ON s.id = si.sale_id
-      LEFT JOIN books b ON si.book_id = b.id
       WHERE s.customer_id = ?
-      ${searchCondition}
+      ${search
+        ? `
+      AND (
+        si.book_name LIKE ?
+        OR si.publisher LIKE ?
+        OR si.edition LIKE ?
+      )
+      `
+        : ""}
       GROUP BY si.book_id
     ) x
   `;

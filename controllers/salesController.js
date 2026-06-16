@@ -320,18 +320,12 @@ export const createSale = (req, res) => {
                            SET
                              quantity = ?,
                              price = ?,
-                             discount = ?,
-                             book_name = ?,
-                             publisher = ?,
-                             edition = ?
+                             discount = ?
                            WHERE id = ?`,
                           [
                             newQty,
                             price,
                             discount,
-                            snapshot.title || "",
-                            snapshot.publisher || "",
-                            snapshot.edition || "",
                             existing.id
                           ],
                           (updateErr) => {
@@ -675,11 +669,10 @@ export const getSaleById = (req, res) => {
   const itemsSql = `
     SELECT
       si.*,
-      COALESCE(si.book_name, b.title) AS title,
-      COALESCE(si.publisher, b.publisher) AS publisher,
-      COALESCE(si.edition, b.edition) AS edition
+      si.book_name AS title,
+      si.publisher,
+      si.edition
     FROM sale_items si
-    LEFT JOIN books b ON si.book_id = b.id
     WHERE si.sale_id = ?
   `;
 
