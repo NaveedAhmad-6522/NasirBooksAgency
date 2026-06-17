@@ -575,12 +575,16 @@ SELECT
         )
     ) AS purchase_price,
 
-    si.price AS selling_price,
+    ROUND(AVG(si.price),2) AS selling_price,
 
     SUM(si.quantity) AS total_sold,
 
     (
-        si.price -
+        AVG(
+            si.price *
+            (1 - IFNULL(si.discount,0)/100)
+        )
+        -
         AVG(
             COALESCE(
                 si.purchase_price_snapshot,
@@ -600,7 +604,11 @@ SELECT
         ) > 0
         THEN (
             (
-                si.price -
+                AVG(
+                    si.price *
+                    (1 - IFNULL(si.discount,0)/100)
+                )
+                -
                 AVG(
                     COALESCE(
                         si.purchase_price_snapshot,
@@ -623,7 +631,11 @@ SELECT
 
     SUM(
         (
-            si.price -
+            (
+                si.price *
+                (1 - IFNULL(si.discount,0)/100)
+            )
+            -
             COALESCE(
                 si.purchase_price_snapshot,
                 p.purchase_price,
@@ -652,8 +664,7 @@ WHERE ${condition}
 GROUP BY
     si.book_name,
     si.publisher,
-    si.edition,
-    si.price
+    si.edition
 
 ORDER BY total_profit DESC
 `, params);
