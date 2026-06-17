@@ -566,13 +566,15 @@ export const restockBook = (req, res) => {
                   // 2️⃣ Update stock
                   const stockSql = `
                     UPDATE books 
-                    SET stock = stock + ? 
+                    SET
+                        stock = stock + ?,
+                        purchase_price = ?
                     WHERE id = ?
                   `;
 
                   connection.query(
                     stockSql,
-                    [quantity, id],
+                    [quantity, purchase_price, id],
                     (err) => {
                       if (err) {
                         return connection.rollback(() => {
@@ -707,6 +709,7 @@ export const updateBook = async (req, res) => {
         edition = ?,
         printed_price = ?,
         current_price = ?,
+        purchase_price = ?,
         stock = ?,
         level = ?
       WHERE id = ?`,
@@ -717,6 +720,7 @@ export const updateBook = async (req, res) => {
         edition,
         Number(printed_price),
         Number(printed_price),
+        Number(purchase_price || 0),
         stock ? Number(stock) : 0,
         level && level.trim() !== "" ? level.trim() : null,
         id,

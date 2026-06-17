@@ -14,7 +14,6 @@ const authHeaders = (json = false) => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
-    if (!onClose) return null; // safety guard
     const [form, setForm] = useState({
         supplier_id: "",
         amount: "",
@@ -75,6 +74,8 @@ const SupplierPaymentModal = ({ suppliers, onClose, onSave }) => {
         window.addEventListener("click", handleClickOutside);
         return () => window.removeEventListener("click", handleClickOutside);
     }, []);
+
+    if (!onClose) return null; // safety guard
 
     return (
         <div
