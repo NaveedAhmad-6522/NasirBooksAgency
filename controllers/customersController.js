@@ -382,9 +382,9 @@ export const getCustomerLedger = (req, res) => {
             'quantity', si.quantity,
             'price', si.price,
             'discount', si.discount,
-            'title', si.book_name,
-            'publisher', si.publisher,
-            'edition', si.edition
+            'title', COALESCE(si.book_name,''),
+            'publisher', COALESCE(si.publisher,''),
+            'edition', COALESCE(si.edition,'')
           )
         )
         FROM sale_items si
@@ -422,8 +422,16 @@ export const getCustomerLedger = (req, res) => {
     FROM customer_returns WHERE customer_id = ?
 
   ) AS ledger
-  ORDER BY created_at ASC, id ASC
-  LIMIT ? OFFSET ?
+  ORDER BY
+    created_at ASC,
+    CASE
+      WHEN type = 'payment' THEN 1
+      WHEN type = 'sale_payment' THEN 2
+      WHEN type = 'return' THEN 3
+      WHEN type = 'sale' THEN 4
+      ELSE 5
+    END,
+    id ASC
 `;
 
       const totalsSql = `
@@ -453,7 +461,7 @@ export const getCustomerLedger = (req, res) => {
         ) t
       `;
 
-      db.query(ledgerSql, [id, id, id, id, limit, offset], (err, ledger) => {
+      db.query(ledgerSql, [id, id, id, id], (err, ledger) => {
         if (err) return res.status(500).json({ error: "Ledger fetch failed" });
 
         db.query(totalsSql, [id, id, id, id], (err2, totalsResult) => {
@@ -499,10 +507,11 @@ export const getCustomerLedger = (req, res) => {
             }
 
             const fullLedger = calculated.reverse();
+            const paginatedLedger = fullLedger.slice(offset, offset + limit);
 
             res.json({
               customer,
-              ledger: fullLedger,
+              ledger: paginatedLedger,
               totals: {
                 debit: Number(totals.debit || 0),
                 credit: Number(totals.credit || 0),

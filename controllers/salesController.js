@@ -102,7 +102,7 @@ export const createSale = (req, res) => {
           // ✅ WALK-IN SALES SHOULD ALWAYS CREATE NEW INVOICE
           if (isWalkIn) {
             return connection.query(
-              `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales`,
+              `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales FOR UPDATE`,
               (invErr, invRows) => {
                 if (invErr) {
                   return connection.rollback(() => {
@@ -191,7 +191,7 @@ export const createSale = (req, res) => {
 
               // ✅ CREATE NEW INVOICE IF NONE EXISTS TODAY
               connection.query(
-                `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales`,
+                `SELECT COALESCE(MAX(CAST(invoice_number AS UNSIGNED)),0)+1 AS nextInvoice FROM sales FOR UPDATE`,
                 (invErr, invRows) => {
                   if (invErr) {
                     return connection.rollback(() => {
@@ -324,12 +324,20 @@ export const createSale = (req, res) => {
                            SET
                              quantity = ?,
                              price = ?,
-                             discount = ?
+                             purchase_price_snapshot = COALESCE(purchase_price_snapshot, ?),
+                             discount = ?,
+                             book_name = ?,
+                             publisher = ?,
+                             edition = ?
                            WHERE id = ?`,
                           [
                             newQty,
                             price,
+                            Number(snapshot.purchase_price || 0),
                             discount,
+                            snapshot.title || "",
+                            snapshot.publisher || "",
+                            snapshot.edition || "",
                             existing.id
                           ],
                           (updateErr) => {
@@ -350,6 +358,7 @@ export const createSale = (req, res) => {
 
                       // ✅ INSERT NEW ITEM
                       else {
+                        const purchaseSnapshot = Number(snapshot.purchase_price || 0);
                         connection.query(
                           `INSERT INTO sale_items
                        (
@@ -369,7 +378,7 @@ export const createSale = (req, res) => {
                             bookId,
                             qty,
                             price,
-                            Number(snapshot.purchase_price || 0),
+                            purchaseSnapshot,
                             discount,
                             snapshot.title || "",
                             snapshot.publisher || "",
@@ -519,12 +528,8 @@ export const createSale = (req, res) => {
 
                       const newBalance = oldBalance + total - paidValue;
 
-                      const invoiceBalance =
-                        invoicePreviousBalance +
-                        Number(existingSaleTotal || 0) +
-                        total -
-                        Number(existingSalePaid || 0) -
-                        paidValue;
+                      // Only use newBalance for invoiceBalance as per requirement
+                      const invoiceBalance = newBalance;
 
                       connection.query(
                         `UPDATE sales
