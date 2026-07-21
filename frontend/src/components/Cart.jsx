@@ -8,6 +8,7 @@ function Cart({
   discount,
   total,
   handleCheckout,
+  handleViewBill,
   paid,
   setPaid,
   customer,
@@ -327,21 +328,30 @@ function Cart({
           </span>
         </div>
 
-        <button
-          onClick={() =>
-            handleCheckout({
-              paid: Number(paid || 0),
-              subtotal: Number(subtotal || 0),
-              discount: Number(discount || 0),
-              total: Number(total || 0),
-              previous_balance: Number(previousBalance || 0),
-              final_balance: Number(finalBalance || 0),
-            })
-          }
-          className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl mt-2 text-[14px] font-semibold shadow-md hover:shadow-lg transition"
-        >
-          COMPLETE SALE
-        </button>
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          <button
+            onClick={handleViewBill}
+            className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-[14px] font-semibold shadow-md hover:shadow-lg transition"
+          >
+            VIEW BILL
+          </button>
+
+          <button
+            onClick={() =>
+              handleCheckout({
+                paid: Number(paid || 0),
+                subtotal: Number(subtotal || 0),
+                discount: Number(discount || 0),
+                total: Number(total || 0),
+                previous_balance: Number(previousBalance || 0),
+                final_balance: Number(finalBalance || 0),
+              })
+            }
+            className="bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl text-[14px] font-semibold shadow-md hover:shadow-lg transition"
+          >
+            COMPLETE SALE
+          </button>
+        </div>
 
       </div>
 

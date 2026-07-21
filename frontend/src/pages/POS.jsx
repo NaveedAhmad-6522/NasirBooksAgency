@@ -273,6 +273,26 @@ function POS() {
     }
   };
 
+  // View Bill (Invoice Preview Only, No Sale)
+  const handleViewBill = () => {
+    if (cart.length === 0) {
+      setToast("Cart is empty");
+      return;
+    }
+
+    setInvoiceData({
+      cart,
+      customer,
+      paid,
+      sale_id: null,
+      invoice_number: "",
+      previous_balance: Number(customer?.balance || 0),
+      updated_balance: Number(customer?.balance || 0),
+    });
+
+    setShowInvoice(true);
+  };
+
   // ✅ CHECKOUT
   // ✅ CHECKOUT (UPDATED WITH WALK-IN SUPPORT)
   const handleCheckout = () => {
@@ -450,6 +470,7 @@ function POS() {
             discount={discount}
             total={total}
             handleCheckout={handleCheckout}
+            handleViewBill={handleViewBill}
             paid={paid}
             setPaid={setPaid}
             customer={customer}
