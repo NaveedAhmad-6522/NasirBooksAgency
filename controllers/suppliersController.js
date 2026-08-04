@@ -417,7 +417,7 @@ export const getSupplierLedger = (req, res) => {
           p.type AS type,
           CONCAT(
             CASE WHEN p.type = 'return' THEN 'RINV-' ELSE 'INV-' END,
-            DATE(MAX(CONVERT_TZ(p.created_at, '+00:00', '+05:00')))
+    DATE(MAX(p.created_at))
           ) AS reference_id,
           MAX(CONVERT_TZ(p.created_at, '+00:00', '+05:00')) AS created_at,
           SUM(
