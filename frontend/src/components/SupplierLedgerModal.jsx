@@ -9,7 +9,30 @@ const authHeaders = (json = false) => ({
   ...(json ? { "Content-Type": "application/json" } : {}),
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
+const formatPakistanDate = (date) => {
+  if (!date) return "-";
 
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(date));
+};
+
+const formatPakistanDateTime = (date) => {
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(date));
+};
 export default function SupplierLedgerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -224,8 +247,7 @@ export default function SupplierLedgerPage() {
   // --- FILTER LOGIC ---
   const filteredLedger = finalLedger.filter((l) => {
     const text = `${l.reference_id} ${l.type}`.toLowerCase();
-    const date = new Date(l.created_at).toLocaleDateString();
-    return (
+    const date = formatPakistanDate(l.created_at);    return (
       text.includes(search.toLowerCase()) ||
       date.includes(search)
     );
@@ -262,7 +284,7 @@ export default function SupplierLedgerPage() {
           <button
             onClick={() => {
               const rows = finalLedger.map((l) => ({
-                Date: new Date(l.created_at).toLocaleDateString(),
+                Date: formatPakistanDate(l.created_at),
                 Type: l.type,
                 Reference: l.reference_id,
                 Purchase:
@@ -382,7 +404,7 @@ export default function SupplierLedgerPage() {
               <tr key={l.reference_id + l.created_at} className="border-t hover:bg-indigo-50 transition even:bg-gray-50/30">
 
                 <td className="px-4 py-3">
-                  {new Date(l.created_at).toLocaleDateString()}
+                {formatPakistanDate(l.created_at)}
                 </td>
 
                 <td className="px-4 py-3">
@@ -539,8 +561,8 @@ export default function SupplierLedgerPage() {
                 : "PAYMENT"}</h2>
               <p className="text-xs text-gray-500 mt-1">
                 {invoiceData.type === "purchase" || invoiceData.type === "return"
-                  ? (invoiceData.invoice_date || new Date(invoiceData.created_at).toLocaleDateString())
-                  : new Date(invoiceData.created_at).toLocaleDateString()}
+       ? (invoiceData.invoice_date || formatPakistanDate(invoiceData.created_at))
+       : formatPakistanDate(invoiceData.created_at)}
               </p>
               <button onClick={() => setInvoiceData(null)} className="mt-2 text-gray-400 hover:text-black">✕</button>
             </div>
@@ -700,7 +722,7 @@ export default function SupplierLedgerPage() {
               <div className="bg-gray-50 p-4 rounded-xl text-left space-y-2">
                 <div>
                   <p className="text-sm text-gray-500">Date</p>
-                  <p className="font-semibold">{new Date(invoiceData.created_at).toLocaleString()}</p>
+                  <p className="font-semibold">{formatPakistanDateTime(invoiceData.created_at)}</p>
 
                   <p className="text-sm text-gray-500 mt-2">Note</p>
                   <p className="font-semibold">{invoiceData.note || "-"}</p>
@@ -742,4 +764,4 @@ export default function SupplierLedgerPage() {
     )}
   </div>
   );
-}
+}  
