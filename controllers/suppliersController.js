@@ -579,7 +579,7 @@ export const getSupplierInvoiceDetails = (req, res) => {
     FROM purchases p
     LEFT JOIN books b ON b.id = p.book_id
     WHERE p.supplier_id = ?
-      AND DATE(CONVERT_TZ(p.created_at, '+00:00', '+05:00')) = ?
+      AND DATE(p.created_at) = ?
       ${type ? "AND TRIM(LOWER(p.type)) = TRIM(LOWER(?))" : ""}
     ORDER BY p.created_at ASC
   `;
