@@ -30,27 +30,49 @@ function Cart({
   const previousBalance = Number(customer?.balance) || 0;
   const billRemaining = Number(total) - Number(paid || 0);
   const finalBalance = previousBalance + billRemaining;
-  const handleDiscountChange = async (item, value) => {
+  const handleDiscountChange = (item, value) => {
     const newDiscount = value === "" ? "" : Number(value);
   
-    // ✅ Update UI instantly
     setCart(cart.map(c =>
       c.id === item.id
         ? { ...c, discount: newDiscount }
         : c
     ));
+  };
   
-    // ❌ Don't save empty
-    if (newDiscount === "") return;
+  const handleDiscountBlur = async (item) => {
+    const currentItem = cart.find(c => c.id === item.id);
   
-    // ✅ Save to DB
-    if (customer?.id) {
-      try {
-        await saveCustomerDiscount(customer.id, item.id, newDiscount);
-        console.log("Discount saved ✅");
-      } catch (err) {
-        console.error("Save error:", err);
-      }
+    if (!currentItem) return;
+  
+    const finalDiscount =
+      currentItem.discount === ""
+        ? 0
+        : Number(currentItem.discount);
+  
+    // Normalize UI value
+    setCart(cart.map(c =>
+      c.id === item.id
+        ? { ...c, discount: finalDiscount }
+        : c
+    ));
+  
+    if (!customer?.id) return;
+  
+    try {
+      await saveCustomerDiscount(
+        customer.id,
+        item.id,
+        finalDiscount
+      );
+  
+      console.log("Discount saved ✅", {
+        customer_id: customer.id,
+        book_id: item.id,
+        discount: finalDiscount,
+      });
+    } catch (err) {
+      console.error("Save error:", err);
     }
   };
   return (
@@ -231,16 +253,7 @@ function Cart({
                   const val = e.target.value;
                   handleDiscountChange(i, val === "" ? "" : Number(val));
                 }}
-                onBlur={() =>
-                  setCart(cart.map(c =>
-                    c.id === i.id
-                      ? {
-                        ...c,
-                        discount: c.discount === "" ? 0 : c.discount
-                      }
-                      : c
-                  ))
-                }
+                onBlur={() => handleDiscountBlur(i)}
                 className="w-10 border rounded-md text-center text-[10px] px-1 py-[3px]"
               />
             </div>
