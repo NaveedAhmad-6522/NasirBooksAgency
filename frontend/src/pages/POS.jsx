@@ -183,8 +183,7 @@ function POS() {
   };
   const addToCart = async (book) => {
     const existing = cart.find((i) => i.id === book.id);
-    const debugCustomerId = customer?.id || null;
-    console.log("Sending:", debugCustomerId, book.id);
+    const customerIdAtRequest = customer?.id || null;
     if (existing) {
       const newQty = existing.quantity + 1;
 
@@ -205,18 +204,23 @@ function POS() {
 
     let discount = 0;
 
-    if (customer?.id) {
+    if (customerIdAtRequest) {
       try {
-        const res = await getCustomerDiscount(customer.id, book.id);
-
+        const res = await getCustomerDiscount(
+          customerIdAtRequest,
+          book.id
+        );
+    
         console.log("DISCOUNT API:", res);
-
-        // ✅ FIXED (clean)
+    
         discount = Number(res?.[0]?.discount || 0);
-
       } catch (err) {
         console.error("Discount fetch error:", err);
       }
+    }
+    if (customerIdAtRequest !== (customer?.id || null)) {
+      console.log("Customer changed while fetching discount. Ignoring old request.");
+      return;
     }
 
     if (Number(book.stock || 0) < 1) {
@@ -224,14 +228,50 @@ function POS() {
       return;
     }
 
-    setCart([
-      ...cart,
-      {
-        ...book,
-        quantity: 1,
-        discount: discount,
-      },
-    ]);
+    setCart((currentCart) => {
+      const existingIndex = currentCart.findIndex(
+        (item) => item.id === book.id
+      );
+    
+      if (existingIndex !== -1) {
+        return currentCart.map((item, index) =>
+          index === existingIndex
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
+            : item
+        );
+      }
+    
+      return [
+        ...currentCart,
+        {
+          ...book,
+          quantity: 1,
+          discount: discount,
+        },
+      ];
+    });
+   
+  };
+  const updateQuantity = (id, quantity) => {
+    setCart((currentCart) =>
+      currentCart.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              quantity: Math.max(
+                1,
+                Math.min(
+                  Number(quantity),
+                  Number(item.stock || 0)
+                )
+              ),
+            }
+          : item
+      )
+    );
   };
   const subtotal = cart.reduce(
     (sum, i) => sum + Number(i.current_price) * Number(i.quantity),
@@ -378,40 +418,45 @@ function POS() {
   useEffect(() => {
     if (!customer?.id || cart.length === 0) return;
   
+    let cancelled = false;
+  
     const updateDiscounts = async () => {
       try {
+        const customerId = customer.id;
+  
         const updatedCart = await Promise.all(
           cart.map(async (item) => {
-            const res = await getCustomerDiscount(customer.id, item.id);
+            const res = await getCustomerDiscount(
+              customerId,
+              item.id
+            );
+  
+            const discount = Number(res?.[0]?.discount || 0);
   
             return {
               ...item,
-              discount: Number(res?.[0]?.discount || 0), // ✅ FIXED
+              discount,
             };
           })
         );
   
-        setCart(updatedCart);
+        // IMPORTANT:
+        // Don't allow an old customer request to overwrite
+        // the cart after the customer has changed again.
+        if (!cancelled) {
+          setCart(updatedCart);
+        }
       } catch (err) {
-        console.error("Discount update error:", err);
+        console.error("Failed to update customer discounts:", err);
       }
     };
   
     updateDiscounts();
+  
+    return () => {
+      cancelled = true;
+    };
   }, [customer]);
-  // Prevent manual quantity overflow in Cart
-  const updateQuantity = (id, qty, stock) => {
-    if (qty > stock) {
-      setToast(`Only ${stock} in stock`);
-      return;
-    }
-
-    setCart((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, quantity: qty } : item
-      )
-    );
-  };
   return (
     <div className="h-screen flex bg-gray-100 text-sm overflow-hidden">
 
