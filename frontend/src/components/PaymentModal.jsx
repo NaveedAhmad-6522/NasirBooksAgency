@@ -8,6 +8,7 @@ const authHeaders = (json = false) => ({
 });
 function PaymentModal({ show, onClose, onSave }) {
   const [query, setQuery] = useState("");
+  const [saving, setSaving] = useState(false);
   const [results, setResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [amount, setAmount] = useState("");
@@ -139,32 +140,50 @@ function PaymentModal({ show, onClose, onSave }) {
         {/* ACTIONS */}
         <div className="flex justify-end gap-2">
 
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-100"
-          >
-            Cancel
-          </button>
+        <button
+  disabled={saving}
+  onClick={onClose}
+  className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  Cancel
+</button>
 
           <button
-            onClick={() => {
-              if (!selectedCustomer) return alert("Select customer");
-              if (!amount) return alert("Enter amount");
+  disabled={saving}
+  onClick={async () => {
+    if (!selectedCustomer) {
+      return alert("Select customer");
+    }
 
-              onSave({
-                customer_id: selectedCustomer.id,
-                amount: Number(amount),
-              });
+    if (!amount || Number(amount) <= 0) {
+      return alert("Enter a valid amount");
+    }
 
-              // RESET
-              setQuery("");
-              setAmount("");
-              setSelectedCustomer(null);
-            }}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
-          >
-            Save Payment
-          </button>
+    if (saving) return;
+
+    try {
+      setSaving(true);
+
+      await onSave({
+        customer_id: selectedCustomer.id,
+        amount: Number(amount),
+        idempotency_key: crypto.randomUUID(),
+      });
+
+      // Reset only after successful save
+      setQuery("");
+      setAmount("");
+      setSelectedCustomer(null);
+    } catch (err) {
+      console.error("Payment save error:", err);
+    } finally {
+      setSaving(false);
+    }
+  }}
+  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {saving ? "Saving..." : "Save Payment"}
+</button>
 
         </div>
 

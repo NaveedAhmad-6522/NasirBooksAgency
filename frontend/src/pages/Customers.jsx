@@ -182,22 +182,38 @@ function Customers() {
   /* =========================
      💰 PAYMENT
   ========================= */
-  const handleSavePayment = async ({ customer_id, amount }) => {
+  const handleSavePayment = async ({
+    customer_id,
+    amount,
+    idempotency_key,
+  }) => {
     try {
-      await fetch(`${API}/api/customers/payment`, {
+      const res = await fetch(`${API}/api/customers/payment`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ customer_id, amount }),
+        body: JSON.stringify({
+          customer_id,
+          amount,
+          idempotency_key,
+        }),
       });
-
+  
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+  
+        throw new Error(
+          errorData.error || "Payment request failed"
+        );
+      }
+  
       setShowPayment(false);
-
-      loadCustomers();
-      loadStats();
-
+  
+      await loadCustomers();
+      await loadStats();
+  
     } catch (err) {
-      console.error(err);
-      alert("Payment failed");
+      console.error("Payment failed:", err);
+      throw err;
     }
   };
 

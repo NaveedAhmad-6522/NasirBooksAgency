@@ -11,7 +11,6 @@ import {
   Pencil
 } from "lucide-react";
 const API_BASE = import.meta.env.VITE_API_URL;
-
 const authHeaders = (json = false) => ({
   ...(json ? { "Content-Type": "application/json" } : {}),
   Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -229,6 +228,7 @@ function CustomerLedgerPage({ onViewSale }) {
   const [data, setData] = React.useState(null);
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState(null);
+  const [savingPayment, setSavingPayment] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [limit] = React.useState(50);
 
@@ -980,7 +980,8 @@ const canEdit =
                       body: JSON.stringify({
                         customer_id: Number(id),
                         amount: Number(amount),
-                        payment_method: "cash"
+                        payment_method: "cash",
+                        idempotency_key: crypto.randomUUID(),
                       })
                     });
 

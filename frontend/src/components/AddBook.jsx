@@ -29,6 +29,7 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
   const cacheRef = useRef({});
   const controllerRef = useRef(null);
   const dropdownRef = useRef();
+const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!supplierSearch.trim()) {
@@ -112,6 +113,10 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (saving) return;
+
+    setSaving(true);
+
     try {
       console.log("BOOK STATE BEFORE SUBMIT:", book);
 
@@ -157,7 +162,11 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
         throw new Error(errorMessage);
       }
 
-      alert(existingBook ? "Book Updated Successfully" : "Book Added Successfully");
+      alert(
+        existingBook
+          ? "Book Updated Successfully"
+          : "Book Added Successfully"
+      );
 
       if (onSuccess) onSuccess();
 
@@ -175,13 +184,13 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
           percentage: "",
         });
       }
-
     } catch (err) {
       console.error(err);
       alert(err.message);
+    } finally {
+      setSaving(false);
     }
   };
-
   return (
     <div className="w-full max-w-2xl">
       <form
@@ -346,11 +355,16 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
           </button>
 
           <button
-            type="submit"
-            className="px-5 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800"
-          >
-            {existingBook ? "Update" : "Add Book"}
-          </button>
+  type="submit"
+  disabled={saving}
+  className="px-5 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {saving
+    ? "Saving..."
+    : existingBook
+      ? "Update"
+      : "Add Book"}
+</button>
         </div>
       </form>
     </div>

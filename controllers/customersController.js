@@ -975,38 +975,79 @@ export const updateLedgerTransaction = (req, res) => {
    💰 ADD PAYMENT
 ========================= */
 export const addPayment = (req, res) => {
-  const { customer_id, amount } = req.body;
+  const {
+    customer_id,
+    amount,
+    idempotency_key,
+  } = req.body;
 
-  if (!customer_id || !amount) {
-    return res.status(400).json({ error: "Missing data" });
+  // Validate input
+  if (
+    !customer_id ||
+    !amount ||
+    !idempotency_key
+  ) {
+    return res.status(400).json({
+      error: "Missing payment data",
+    });
   }
 
-  // 1️⃣ INSERT PAYMENT
   const sql = `
-    INSERT INTO payments (customer_id, amount)
-    VALUES (?, ?)
+    INSERT INTO payments (
+      customer_id,
+      amount,
+      idempotency_key
+    )
+    VALUES (?, ?, ?)
   `;
 
-  db.query(sql, [customer_id, amount], (err) => {
-    if (err) {
-      console.error("Payment Insert Error:", err);
-      return res.status(500).json({ error: "Insert failed" });
-    }
+  db.query(
+    sql,
+    [customer_id, amount, idempotency_key],
+    (err, result) => {
+      if (err) {
+        // Same payment request was already processed
+        if (err.code === "ER_DUP_ENTRY") {
+          console.log(
+            "Duplicate payment request ignored:",
+            idempotency_key
+          );
 
-    // Rebuild customer ledger after payment insert
-    rebuildCustomerLedger(customer_id)
-      .then(() => {
-        res.json({
-          message: 'Payment added successfully'
+          return res.status(200).json({
+            message: "Payment already processed",
+            duplicate: true,
+          });
+        }
+
+        console.error("Payment Insert Error:", err);
+
+        return res.status(500).json({
+          error: "Insert failed",
         });
-      })
-      .catch((e) => {
-        console.error(e);
-        return res.status(500).json({ error: 'Ledger rebuild failed' });
-      });
-  });
-};
+      }
 
+      // Rebuild ledger only for a NEW payment
+      rebuildCustomerLedger(customer_id)
+        .then(() => {
+          return res.status(201).json({
+            message: "Payment added successfully",
+            payment_id: result.insertId,
+            duplicate: false,
+          });
+        })
+        .catch((e) => {
+          console.error(
+            "Ledger rebuild error:",
+            e
+          );
+
+          return res.status(500).json({
+            error: "Ledger rebuild failed",
+          });
+        });
+    }
+  );
+};
 
 // =========================
 //   ⬇️ EXPORT CUSTOMERS
