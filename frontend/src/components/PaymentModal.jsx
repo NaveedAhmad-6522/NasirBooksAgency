@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, User } from "lucide-react";
 const API_BASE = import.meta.env.VITE_API_URL;
 
@@ -9,6 +9,7 @@ const authHeaders = (json = false) => ({
 function PaymentModal({ show, onClose, onSave }) {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [results, setResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [amount, setAmount] = useState("");
@@ -154,29 +155,33 @@ function PaymentModal({ show, onClose, onSave }) {
     if (!selectedCustomer) {
       return alert("Select customer");
     }
-
+  
     if (!amount || Number(amount) <= 0) {
       return alert("Enter a valid amount");
     }
-
-    if (saving) return;
-
+  
+    // Prevent double-click / double-submit immediately
+    if (savingRef.current) return;
+  
+    savingRef.current = true;
+    setSaving(true);
+  
     try {
-      setSaving(true);
-
       await onSave({
         customer_id: selectedCustomer.id,
         amount: Number(amount),
         idempotency_key: crypto.randomUUID(),
       });
-
+  
       // Reset only after successful save
       setQuery("");
       setAmount("");
       setSelectedCustomer(null);
+  
     } catch (err) {
       console.error("Payment save error:", err);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }}

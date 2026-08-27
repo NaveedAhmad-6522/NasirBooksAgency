@@ -960,48 +960,70 @@ const canEdit =
             />
 
             <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="px-3 py-1 border rounded"
-              >
-                Cancel
-              </button>
+            <button
+  disabled={savingPayment}
+  onClick={() => setShowPaymentModal(false)}
+  className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  Cancel
+</button>
 
               <button
-                onClick={async () => {
-                  try {
-                    const amount = document.getElementById("paymentAmount").value;
-                    if (!Number(amount) || Number(amount) <= 0) {
-                      return alert("Please enter a valid payment amount");
-                    }
-                    const res = await fetch(`${API_BASE}/api/customers/payment`, {
-                      method: "POST",
-                      headers: authHeaders(true),
-                      body: JSON.stringify({
-                        customer_id: Number(id),
-                        amount: Number(amount),
-                        payment_method: "cash",
-                        idempotency_key: crypto.randomUUID(),
-                      })
-                    });
+  disabled={savingPayment}
+  onClick={async () => {
+    if (savingPayment) return;
 
-                    const result = await res.json().catch(() => ({}));
+    const amount = document.getElementById("paymentAmount").value;
 
-                    if (!res.ok) {
-                      throw new Error(result.error || "Payment failed");
-                    }
-                    alert("Payment added successfully");
-                    setShowPaymentModal(false);
-                    fetchLedger();
-                  } catch (err) {
-                    console.error(err);
-                    alert(err.message || "Payment failed");
-                  }
-                }}
-                className="px-3 py-1 bg-blue-600 text-white rounded"
-              >
-                Save
-              </button>
+    if (!Number(amount) || Number(amount) <= 0) {
+      return alert("Please enter a valid payment amount");
+    }
+
+    setSavingPayment(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/customers/payment`, {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          customer_id: Number(id),
+          amount: Number(amount),
+          payment_method: "cash",
+          idempotency_key: crypto.randomUUID(),
+        }),
+      });
+
+      const result = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(result.error || result.message || "Payment failed");
+      }
+
+      alert(
+        result.duplicate
+          ? "This payment was already processed."
+          : "Payment added successfully"
+      );
+
+      setShowPaymentModal(false);
+      fetchLedger();
+
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Payment failed");
+
+    } finally {
+      setSavingPayment(false);
+    }
+  }}
+  className={`px-3 py-1 rounded text-white ${
+    savingPayment
+      ? "bg-gray-400 cursor-not-allowed"
+      : "bg-blue-600 hover:bg-blue-700"
+  }`}
+>
+  {savingPayment ? "Saving..." : "Save"}
+</button>
             </div>
 
           </div>
