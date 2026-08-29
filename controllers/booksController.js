@@ -17,8 +17,16 @@ export const addBook = (req, res) => {
     barcode,
     supplier_id,
     discount,
+    idempotency_key,
   } = req.body;
-
+  if (!title) {
+    return res.status(400).json({ error: "Title is required" });
+  }
+  if (!idempotency_key) {
+    return res.status(400).json({
+      error: "Missing idempotency key",
+    });
+  }
   // 🔥 CLEAN DATA
   title = title?.trim();
   publisher = publisher || "";
@@ -36,45 +44,85 @@ export const addBook = (req, res) => {
   }
 
   // Prevent duplicate books (same title + publisher + edition)
-  db.query(
-    `
+  // 🔒 IDEMPOTENCY CHECK
+db.query(
+  `
     SELECT id
     FROM books
-    WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
-      AND LOWER(TRIM(IFNULL(publisher, ''))) = LOWER(TRIM(?))
-      AND LOWER(TRIM(IFNULL(edition, ''))) = LOWER(TRIM(?))
+    WHERE idempotency_key = ?
     LIMIT 1
-    `,
-    [title, publisher, edition],
-    (err, existingBooks) => {
-      if (err) {
-        return res.status(500).json({ error: "Duplicate check failed" });
-      }
-
-      if (existingBooks.length > 0) {
-        return res.status(400).json({ error: "Book already exists" });
-      }
-
-      if (barcode) {
-        return db.query(
-          "SELECT id FROM books WHERE barcode = ?",
-          [barcode],
-          (err, existing) => {
-            if (err) return res.status(500).json({ error: "Barcode check failed" });
-            if (existing.length) {
-              return res.status(400).json({ error: "Barcode already exists" });
-            }
-
-            proceedAddBook();
-          }
-        );
-      }
-
-      proceedAddBook();
+  `,
+  [idempotency_key],
+  (err, existingBookByKey) => {
+    if (err) {
+      console.error("Idempotency check failed:", err);
+      return res.status(500).json({
+        error: "Idempotency check failed",
+      });
     }
-  );
 
-  return;
+    // Same request was already processed
+    if (existingBookByKey.length > 0) {
+      return res.status(200).json({
+        message: "Book already processed",
+        duplicate: true,
+        book_id: existingBookByKey[0].id,
+      });
+    }
+
+    // 🔍 NORMAL DUPLICATE BOOK CHECK
+    db.query(
+      `
+        SELECT id
+        FROM books
+        WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
+          AND LOWER(TRIM(IFNULL(publisher, ''))) = LOWER(TRIM(?))
+          AND LOWER(TRIM(IFNULL(edition, ''))) = LOWER(TRIM(?))
+        LIMIT 1
+      `,
+      [title, publisher, edition],
+      (err, existingBooks) => {
+        if (err) {
+          return res.status(500).json({
+            error: "Duplicate check failed",
+          });
+        }
+
+        if (existingBooks.length > 0) {
+          return res.status(400).json({
+            error: "Book already exists",
+          });
+        }
+
+        if (barcode) {
+          return db.query(
+            "SELECT id FROM books WHERE barcode = ?",
+            [barcode],
+            (err, existing) => {
+              if (err) {
+                return res.status(500).json({
+                  error: "Barcode check failed",
+                });
+              }
+
+              if (existing.length) {
+                return res.status(400).json({
+                  error: "Barcode already exists",
+                });
+              }
+
+              proceedAddBook();
+            }
+          );
+        }
+
+        proceedAddBook();
+      }
+    );
+  }
+);
+
+return;
 
   function proceedAddBook() {
     if (!supplier_id || purchase_price <= 0 || stock <= 0) {
@@ -114,31 +162,59 @@ export const addBook = (req, res) => {
             }
   
             const insertBookSql = `
-              INSERT INTO books 
-              (title, publisher, category, edition, level, printed_price, current_price, purchase_price, stock, barcode)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-  
-            connection.query(
-              insertBookSql,
-              [
-                title,
-                publisher,
-                category,
-                edition,
-                level,
-                printed_price,
-                current_price,
-                purchase_price,
-                0,
-                barcode,
-              ],
+            INSERT INTO books 
+            (
+              title,
+              publisher,
+              category,
+              edition,
+              level,
+              printed_price,
+              current_price,
+              purchase_price,
+              stock,
+              barcode,
+              idempotency_key
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `;
+          
+          connection.query(
+            insertBookSql,
+            [
+              title,
+              publisher,
+              category,
+              edition,
+              level,
+              printed_price,
+              current_price,
+              purchase_price,
+              0,
+              barcode,
+              idempotency_key,
+            ],
               (err, result) => {
                 if (err) {
                   return connection.rollback(() => {
                     connection.release();
+                
+                    // Another request already created this book
+                    if (
+                      err.code === "ER_DUP_ENTRY" &&
+                      err.sqlMessage?.includes("uq_books_idempotency_key")
+                    ) {
+                      return res.status(200).json({
+                        message: "Book already processed",
+                        duplicate: true,
+                      });
+                    }
+                
                     console.error("Insert Book Error:", err);
-                    res.status(500).json({ error: "Failed to add book" });
+                
+                    res.status(500).json({
+                      error: "Failed to add book",
+                    });
                   });
                 }
   

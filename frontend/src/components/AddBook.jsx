@@ -29,7 +29,8 @@ function AddBook({ existingBook, onSuccess, onCancel }) {
   const cacheRef = useRef({});
   const controllerRef = useRef(null);
   const dropdownRef = useRef();
-const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!supplierSearch.trim()) {
@@ -112,18 +113,22 @@ const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (saving) return;
-
+  
+    if (savingRef.current) return;
+    if (!existingBook && !book.supplier_id) {
+      alert("Please select a supplier");
+      return;
+    }
+    
+    const idempotencyKey = !existingBook
+      ? crypto.randomUUID()
+      : null;
+    
+    savingRef.current = true;
     setSaving(true);
-
     try {
       console.log("BOOK STATE BEFORE SUBMIT:", book);
 
-      if (!existingBook && !book.supplier_id) {
-        alert("Please select a supplier");
-        return;
-      }
 
       const url = existingBook
         ? `${API_BASE}/api/books/${existingBook.id}`
@@ -139,6 +144,7 @@ const [saving, setSaving] = useState(false);
         supplier_id: book.supplier_id || null,
         percentage: book.percentage ? Number(book.percentage) : null,
         level: book.level?.trim() || null,
+        idempotency_key: idempotencyKey,
       };
 
       console.log("FINAL PAYLOAD:", payload);
@@ -188,6 +194,7 @@ const [saving, setSaving] = useState(false);
       console.error(err);
       alert(err.message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
