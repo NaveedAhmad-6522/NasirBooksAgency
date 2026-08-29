@@ -340,7 +340,12 @@ function POS() {
       setToast("Cart is empty");
       return;
     }
-    // ✅ ONLY OPEN MODAL
+  
+    if (!customer?.id) {
+      setToast("Please select a customer before completing the sale");
+      return;
+    }
+  
     setShowConfirm(true);
   };
 
