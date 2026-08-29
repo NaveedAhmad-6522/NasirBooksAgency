@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import BooksHeader from "../components/BooksHeader";
 import BooksTable from "../components/BooksTable";
 import Sidebar from "../components/Sidebar";
@@ -21,7 +21,8 @@ function Books() {
   const [filterStatus, setFilterStatus] = useState("active");
   const [currentPage, setCurrentPage] = useState(1);
   const [restockBook, setRestockBook] = useState(null);
-
+  const [restockSaving, setRestockSaving] = useState(false);
+  const restockSavingRef = useRef(false);
 const [restockData, setRestockData] = useState({
   supplier_id: "",
   quantity: "",
@@ -156,6 +157,11 @@ const [restockData, setRestockData] = useState({
 
   
   const submitRestock = async () => {
+    if (restockSavingRef.current) return;
+  
+    restockSavingRef.current = true;
+    setRestockSaving(true);
+  
     try {
       const res = await fetch(
         `${API_BASE}/api/books/${restockBook.id}/restock`,
@@ -165,18 +171,23 @@ const [restockData, setRestockData] = useState({
           body: JSON.stringify(restockData),
         }
       );
-
+  
       const data = await res.json();
-
+  
       if (!res.ok) {
         throw new Error(data?.error || "Restock failed");
       }
-
+  
       setRestockBook(null);
       fetchBooks();
+  
     } catch (err) {
       console.error("RESTOCK ERROR:", err);
       alert(err.message);
+  
+    } finally {
+      restockSavingRef.current = false;
+      setRestockSaving(false);
     }
   };
 
@@ -411,11 +422,12 @@ const [restockData, setRestockData] = useState({
                 </button>
 
                 <button
-                  onClick={submitRestock}
-                  className="px-3 py-1 bg-black text-white rounded"
-                >
-                  Save
-                </button>
+  disabled={restockSaving}
+  onClick={submitRestock}
+  className="px-3 py-1 bg-black text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {restockSaving ? "Saving..." : "Save"}
+</button>
               </div>
 
             </div>
